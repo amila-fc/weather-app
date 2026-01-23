@@ -1,26 +1,21 @@
-plugins {
-    java
-    id("org.springframework.boot") version "3.2.2"
-    id("io.spring.dependency-management") version "1.1.4"
+// Root build configuration for monorepo
+allprojects {
+    group = "com.example"
+    version = "0.0.1-SNAPSHOT"
+
+    repositories {
+        mavenCentral()
+    }
 }
 
-group = "com.example"
-version = "0.0.1-SNAPSHOT"
-
-java {
-    sourceCompatibility = JavaVersion.VERSION_17
+// Configure Java projects
+subprojects {
+    if (name == "backend") {
+        apply(plugin = "java")
+    }
 }
 
-repositories {
-    mavenCentral()
-}
-
-dependencies {
-    implementation("org.springframework.boot:spring-boot-starter-web")
-    implementation("org.apache.httpcomponents:httpclient:4.5.6")
-    testImplementation("org.springframework.boot:spring-boot-starter-test")
-}
-
-tasks.withType<Test> {
-    useJUnitPlatform()
+// Root build task builds everything
+tasks.register("build") {
+    dependsOn(":backend:build", ":frontend:npmBuild")
 }
