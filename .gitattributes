@@ -7,3 +7,9 @@
 *.yaml text eol=lf
 *.bat text eol=crlf
 *.cmd text eol=crlf
+
+# Screenshots and other binary assets must never be line-ending converted.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary

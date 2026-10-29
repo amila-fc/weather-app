@@ -7,6 +7,29 @@ A full-stack weather application with Spring Boot backend and React frontend tha
 [![Backend coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Famila-fc%2Fweather-app%2Fbadges%2Fbackend-coverage.json)](https://github.com/amila-fc/weather-app/actions/workflows/backend-ci.yml)
 [![Frontend coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Famila-fc%2Fweather-app%2Fbadges%2Ffrontend-coverage.json)](https://github.com/amila-fc/weather-app/actions/workflows/frontend-ci.yml)
 
+## Screenshots
+
+Captured from the running app (Vite dev server on `:3000`, backend on `:8080`) with Playwright driving Chrome at
+1440×1100 and 390×844.
+
+### Current weather — light and dark themes
+
+<p>
+  <img src="docs/screenshots/current-weather.png" alt="Current weather tab: Leaflet map, coordinate form and current conditions in the light theme" width="49%" />
+  <img src="docs/screenshots/current-weather-dark.png" alt="The same current weather view in the dark theme" width="49%" />
+</p>
+
+### 24-hour trends
+
+![Trends dashboard with feels-like temperature, wind compass, sunrise/sunset and temperature and humidity charts](docs/screenshots/trends.png)
+
+### Location comparison
+
+![Comparison table for three locations with the warmest/coldest temperature and highest/lowest humidity highlighted](docs/screenshots/comparison.png)
+
+### Mobile layout
+
+<img src="docs/screenshots/mobile.png" alt="Mobile layout at 390 px wide: tabs, map, coordinate form and current conditions stacked in one column" width="320" />
 
 ## Coding Exercises
 
