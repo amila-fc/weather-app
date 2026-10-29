@@ -1,115 +1,111 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { WeatherDisplay } from './components/WeatherDisplay';
-import { WeatherMap } from './components/WeatherMap';
-import { weatherApi, Coordinates } from './api/weatherClient';
+import { ComparisonTab } from './components/ComparisonTab';
+import { CurrentWeatherTab } from './components/CurrentWeatherTab';
+import { ErrorBoundary, ErrorFallback } from './components/ErrorBoundary';
+import { NotificationBell } from './components/NotificationBell';
+import { TabNav } from './components/TabNav';
+import type { AppTab } from './components/TabNav';
+import { ThemeToggle } from './components/ThemeToggle';
+import { useComparisonLocations } from './hooks/useComparisonLocations';
+import { useWeatherWatch } from './hooks/useWeatherWatch';
+import { ActiveLocationProvider, useActiveLocation } from './state/ActiveLocationContext';
+import type { Coordinates } from './api/weatherClient';
+import { weatherApi } from './api/weatherClient';
 import './App.css';
 
-const DEFAULT_COORDINATES: Coordinates = {
-  lat: 37.7749, // Default: San Francisco
-  lng: -122.4194,
-};
+const tabFromHash = (): AppTab => (window.location.hash === '#compare' ? 'compare' : 'current');
 
-function App() {
-  const [coordinates, setCoordinates] = useState<Coordinates>(DEFAULT_COORDINATES);
-  const [points, setPoints] = useState<Coordinates[]>([DEFAULT_COORDINATES]);
-  const [inputLat, setInputLat] = useState(coordinates.lat.toString());
-  const [inputLng, setInputLng] = useState(coordinates.lng.toString());
+const reloadPage = () => window.location.reload();
+
+function AppContent() {
+  const [activeTab, setActiveTab] = useState<AppTab>(tabFromHash);
+  const comparison = useComparisonLocations();
+  const { setLocation } = useActiveLocation();
+
+  useWeatherWatch();
+
+  // Keep the tab in the URL hash so a reload reopens the same view.
+  useEffect(() => {
+    const onHashChange = () => setActiveTab(tabFromHash());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
 
   const { data: status } = useQuery({
     queryKey: ['status'],
     queryFn: weatherApi.getStatus,
   });
 
-  // Single source of truth: the form, the geolocation button and a map click all funnel through here.
-  const selectCoordinates = (next: Coordinates) => {
-    setCoordinates(next);
-    setInputLat(next.lat.toString());
-    setInputLng(next.lng.toString());
-    setPoints((current) =>
-      current.some((point) => point.lat === next.lat && point.lng === next.lng)
-        ? current
-        : [...current, next],
-    );
+  const selectTab = (tab: AppTab) => {
+    setActiveTab(tab);
+    window.location.hash = tab === 'compare' ? '#compare' : '';
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const lat = parseFloat(inputLat);
-    const lng = parseFloat(inputLng);
-
-    if (!isNaN(lat) && !isNaN(lng)) {
-      selectCoordinates({ lat, lng });
-    }
-  };
-
-  const useCurrentLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
-          selectCoordinates({ lat: latitude, lng: longitude });
-        },
-        (error) => {
-          console.error('Error getting location:', error);
-          alert('Unable to get your location');
-        }
-      );
-    } else {
-      alert('Geolocation is not supported by your browser');
-    }
+  // A map pin popup hands its selected points straight to the comparison tab.
+  const compareMapLocations = (locations: Coordinates[]) => {
+    comparison.replaceAll(locations);
+    selectTab('compare');
   };
 
   return (
     <div className="app">
+      <a className="skip-link" href="#main">
+        Skip to main content
+      </a>
+
       <header className="app-header">
-        <h1>Weather App</h1>
-        {status && <div className="server-status">Server Status: {status}</div>}
+        <div className="app-header__title">
+          <h1>Weather App</h1>
+          {status && <p className="server-status">Server Status: {status}</p>}
+        </div>
+        <div className="app-header__actions">
+          <ThemeToggle />
+          <NotificationBell
+            onSelectAlert={(alert) => {
+              setLocation(alert.coordinates);
+              selectTab('current');
+            }}
+          />
+        </div>
       </header>
 
-      <main className="app-main">
-        <WeatherMap coordinates={coordinates} points={points} onSelect={selectCoordinates} />
-        <div className="coordinates-form">
-          <h2>Enter Location</h2>
-          <form onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label htmlFor="latitude">Latitude:</label>
-              <input
-                type="number"
-                id="latitude"
-                value={inputLat}
-                onChange={(e) => setInputLat(e.target.value)}
-                step="0.0001"
-                min="-90"
-                max="90"
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="longitude">Longitude:</label>
-              <input
-                type="number"
-                id="longitude"
-                value={inputLng}
-                onChange={(e) => setInputLng(e.target.value)}
-                step="0.0001"
-                min="-180"
-                max="180"
-                required
-              />
-            </div>
-            <div className="form-buttons">
-              <button type="submit">Get Weather</button>
-              <button type="button" onClick={useCurrentLocation}>
-                Use My Location
-              </button>
-            </div>
-          </form>
-        </div>
+      <nav className="app-nav" aria-label="Weather views">
+        <TabNav activeTab={activeTab} onSelect={selectTab} />
+      </nav>
 
-        <WeatherDisplay coordinates={coordinates} />
+      <p className="sr-only" role="status" aria-live="polite">
+        {activeTab === 'current' ? 'Showing current weather' : 'Showing comparison'}
+      </p>
+
+      <main className="app-main" id="main" tabIndex={-1}>
+        <ErrorBoundary
+          key={activeTab}
+          fallback={(reset) => (
+            <ErrorFallback
+              title="We couldn't show this view."
+              message="Something went wrong while rendering this view. Try again, or reload the page."
+              onRetry={reset}
+              onReload={reloadPage}
+            />
+          )}
+        >
+          {activeTab === 'current' ? (
+            <CurrentWeatherTab onCompare={compareMapLocations} />
+          ) : (
+            <ComparisonTab comparison={comparison} />
+          )}
+        </ErrorBoundary>
       </main>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <ActiveLocationProvider>
+      <AppContent />
+    </ActiveLocationProvider>
   );
 }
 

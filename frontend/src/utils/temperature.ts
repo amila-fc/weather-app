@@ -33,11 +33,3 @@ export function getTemperatureBand(temperatureFahrenheit: number): TemperatureBa
   }
   return { band: 'hot', color: BAND_COLORS.hot };
 }
-
-/**
- * Rounds a coordinate to 4 decimals, the precision the backend uses for its cache and history keys.
- */
-export function roundCoordinate(value: number, decimals = 4): number {
-  const factor = 10 ** decimals;
-  return Math.round(value * factor) / factor;
-}

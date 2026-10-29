@@ -1,9 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { weatherApi, Coordinates } from '../api/weatherClient';
+import { formatHumidity } from '../utils/format';
+import { SkeletonBlock } from './Skeleton';
 
 interface WeatherDisplayProps {
   coordinates: Coordinates;
 }
+
+const SKELETON_ROWS = ['Temperature', 'Feels Like', 'Humidity', 'Description'];
 
 export const WeatherDisplay: React.FC<WeatherDisplayProps> = ({ coordinates }) => {
   const { data, isLoading, error, refetch } = useQuery({
@@ -14,24 +18,36 @@ export const WeatherDisplay: React.FC<WeatherDisplayProps> = ({ coordinates }) =
 
   if (isLoading) {
     return (
-      <div className="weather-loading">
-        <div className="spinner"></div>
-        <p>Loading weather data...</p>
+      <div className="weather-display weather-display--loading" aria-busy="true">
+        <h2>Current Weather</h2>
+        <span className="sr-only">
+          Loading weather for {coordinates.lat}, {coordinates.lng}
+        </span>
+        <div className="weather-info">
+          {SKELETON_ROWS.map((label) => (
+            <div className="weather-item" key={label}>
+              <SkeletonBlock width="30%" height="1rem" />
+              <SkeletonBlock width="40%" height="1rem" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="weather-error">
-        <p>Error loading weather data</p>
-        <button onClick={() => refetch()}>Retry</button>
+      <div className="weather-error" role="alert">
+        <p>We couldn't load the weather for this location. Check your connection and try again.</p>
+        <button type="button" onClick={() => refetch()}>
+          Retry
+        </button>
       </div>
     );
   }
 
   if (!data) {
-    return <div>Enter coordinates to get weather</div>;
+    return <p className="weather-empty">Enter coordinates to get weather</p>;
   }
 
   const isFrosty = data.temperature < 32; // Fahrenheit
@@ -39,6 +55,9 @@ export const WeatherDisplay: React.FC<WeatherDisplayProps> = ({ coordinates }) =
   return (
     <div className={`weather-display ${isFrosty ? 'frost-warning' : ''}`}>
       <h2>Current Weather</h2>
+      <p className="sr-only" role="status" aria-live="polite">
+        Current temperature {Math.round(data.temperature)} degrees Fahrenheit, {data.description}
+      </p>
       {isFrosty && (
         <div className="frost-alert">
           ❄️ Frost Warning: Temperature below freezing!
@@ -55,7 +74,7 @@ export const WeatherDisplay: React.FC<WeatherDisplayProps> = ({ coordinates }) =
         </div>
         <div className="weather-item">
           <span className="label">Humidity:</span>
-          <span className="value">{data.humidity}%</span>
+          <span className="value">{formatHumidity(data.humidity)}</span>
         </div>
         <div className="weather-item">
           <span className="label">Description:</span>

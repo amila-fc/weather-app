@@ -5,12 +5,13 @@ export const weatherQueryKey = (coordinates: Coordinates) =>
   ['weather', coordinates.lat, coordinates.lng] as const;
 
 /**
- * The single weather query used by the map popup, the map marker and WeatherDisplay, so a clicked point
- * costs one request and every surface reads the same cached result.
+ * Query options shared by `useQuery` and `useQueries`, so the map popup, WeatherDisplay and the comparison
+ * table all read the same `['weather', lat, lng]` cache entry: one request per location, never duplicated.
  */
-export const useWeatherQuery = (coordinates: Coordinates) =>
-  useQuery({
-    queryKey: weatherQueryKey(coordinates),
-    queryFn: () => weatherApi.getWeather(coordinates),
-    enabled: Number.isFinite(coordinates.lat) && Number.isFinite(coordinates.lng),
-  });
+export const weatherQueryOptions = (coordinates: Coordinates) => ({
+  queryKey: weatherQueryKey(coordinates),
+  queryFn: () => weatherApi.getWeather(coordinates),
+  enabled: Number.isFinite(coordinates.lat) && Number.isFinite(coordinates.lng),
+});
+
+export const useWeatherQuery = (coordinates: Coordinates) => useQuery(weatherQueryOptions(coordinates));

@@ -1,68 +1,159 @@
+/*
+ * Design tokens. Contrast ratios were computed against the surface/background each pair sits on
+ * (WCAG 2.x relative luminance) so they are verified rather than eyeballed.
+ */
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  color-scheme: light;
+
+  /* Light theme: text/bg 16.62:1 · muted/bg 5.60:1 · accent/bg 5.87:1 · contrast/accent 6.29:1
+     border/surface 3.66:1 · focus/bg 6.26:1 · danger/bg 6.11:1 · danger/danger-surface 5.72:1
+     band text: freezing 6.70 · cold 5.36 · mild 5.02 · warm 5.02 · hot 6.47 (all vs surface) */
+  --color-bg: #f6f7fb;
+  --color-surface: #ffffff;
+  --color-surface-muted: #eef1f7;
+  --color-text: #14181f;
+  --color-text-muted: #5a6472;
+  --color-accent: #4f46e5;
+  --color-accent-contrast: #ffffff;
+  --color-border: #7d8698;
+  --color-focus: #1d4ed8;
+  --color-danger: #b3261e;
+  --color-danger-surface: #fdecea;
+  --color-band-freezing: #1d4ed8;
+  --color-band-cold: #0e7490;
+  --color-band-mild: #15803d;
+  --color-band-warm: #b45309;
+  --color-band-hot: #b91c1c;
+  --color-highlight-warm: #fdece0;
+  --color-highlight-cold: #e3eafe;
+  --color-highlight-humid: #dff0f4;
+  --color-highlight-dry: #ecedf0;
+  --shadow-panel: 0 12px 32px rgba(15, 23, 42, 0.18);
+
+  /* Map markers keep their own fills: white 10px bold text scores >= 5:1 on every one of them. */
+  --color-marker-text: #ffffff;
+  --color-marker-freezing: #1e40af;
+  --color-marker-cold: #0e7490;
+  --color-marker-mild: #15803d;
+  --color-marker-warm: #c2410c;
+  --color-marker-hot: #b91c1c;
+
+  --radius-md: 12px;
+  --radius-pill: 999px;
+  --target-min: 44px;
+  --space-section: clamp(1rem, 2.5vw, 2rem);
+  --font-body: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+
+  font-family: var(--font-body);
   line-height: 1.5;
   font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* Dark theme: text/bg 16.59:1 · muted/bg 8.62:1 · accent/bg 6.26:1 · contrast/accent 6.36:1
+     border/surface 3.48:1 · focus/bg 10.13:1 · danger/bg 9.15:1
+     band text: freezing 9.16 · cold 11.39 · mild 11.76 · warm 9.79 · hot 8.70 (all vs surface) */
+  --color-bg: #12151c;
+  --color-surface: #1b1f27;
+  --color-surface-muted: #232936;
+  --color-text: #f2f4f8;
+  --color-text-muted: #a9b3c2;
+  --color-accent: #8b8cf7;
+  --color-accent-contrast: #10131a;
+  --color-border: #69738a;
+  --color-focus: #93c5fd;
+  --color-danger: #ff9d97;
+  --color-danger-surface: #3a1d1d;
+  --color-band-freezing: #93c5fd;
+  --color-band-cold: #67e8f9;
+  --color-band-mild: #86efac;
+  --color-band-warm: #fdba74;
+  --color-band-hot: #fca5a5;
+  --color-highlight-warm: #3a2a1e;
+  --color-highlight-cold: #1e2a44;
+  --color-highlight-humid: #10303a;
+  --color-highlight-dry: #262b35;
+  --shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
-a:hover {
-  color: #535bf2;
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
   min-height: 100vh;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+a {
+  font-weight: 500;
+  color: var(--color-accent);
+  text-decoration: inherit;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--color-text);
+  line-height: 1.2;
 }
 
 h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+  font-size: clamp(1.75rem, 3vw, 3.2rem);
 }
 
+/* Interactive controls keep a 44x44 target and a visible focus ring. */
 button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
+  min-height: var(--target-min);
+  min-width: var(--target-min);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  padding: 0.55em 1.1em;
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
+  background-color: var(--color-surface-muted);
+  color: var(--color-text);
   cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  transition: border-color 0.25s, background-color 0.25s;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+button:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .skeleton::after,
+  .temperature-marker--pending,
+  .frost-alert {
+    animation: none;
   }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
+
+  button,
+  .tab-nav__tab {
+    transition: none;
   }
 }

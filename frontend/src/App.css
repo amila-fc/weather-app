@@ -1,52 +1,164 @@
-#root {
+﻿#root {
+  width: 100%;
   max-width: 1280px;
   margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-  width: 100%;
+  padding: clamp(1rem, 3vw, 2rem);
+  text-align: left;
+}
+
+.skip-link {
+  position: absolute;
+  top: -4rem;
+  left: 0.5rem;
+  z-index: 50;
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  transition: top 0.2s;
+}
+
+.skip-link:focus {
+  top: 0.5rem;
 }
 
 .app {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: clamp(1rem, 2.5vw, 2rem);
 }
 
 .app-header {
-  margin-bottom: 2rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.app-header__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .app-header h1 {
-  margin: 0 0 1rem 0;
-  background: linear-gradient(120deg, #89f7fe 0%, #66a6ff 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  margin: 0;
+  color: var(--color-accent);
+  letter-spacing: -0.01em;
+}
+
+.app-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .server-status {
-  padding: 0.5rem 1rem;
-  background: rgba(0, 255, 0, 0.1);
-  border: 1px solid rgba(0, 255, 0, 0.3);
-  border-radius: 8px;
-  color: #00ff00;
+  margin: 0;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
   font-size: 0.9rem;
-  display: inline-block;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+}
+
+.theme-toggle__icon {
+  font-size: 1.15rem;
+  line-height: 1;
 }
 
 .app-main {
-  display: flex;
-  flex-direction: column;
-  gap: 3rem;
-  align-items: center;
+  display: grid;
+  gap: var(--space-section);
+  align-items: start;
+}
+
+.current-tab,
+.compare-tab {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-section);
+  align-items: start;
+  width: 100%;
+}
+
+/* Grid items default to min-width:auto, which would let the 480px-wide table push the page wider
+   instead of scrolling inside its own wrapper. */
+.current-tab > *,
+.compare-tab > * {
+  min-width: 0;
+}
+
+/* Single column below 900px: map, then the form, then the weather panel. */
+@media (min-width: 900px) {
+  .current-tab {
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    grid-template-areas:
+      'map form'
+      'map weather';
+    align-items: start;
+  }
+
+  .current-tab > .weather-map-section {
+    grid-area: map;
+  }
+
+  .current-tab > .coordinates-form {
+    grid-area: form;
+  }
+
+  .current-tab > .weather-display,
+  .current-tab > .weather-error,
+  .current-tab > .weather-empty {
+    grid-area: weather;
+  }
+
+  .compare-tab {
+    grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+    grid-template-areas:
+      'editor locations'
+      'favorites favorites';
+  }
+
+  .compare-tab > .compare-editor {
+    grid-area: editor;
+  }
+
+  .compare-tab > .compare-locations {
+    grid-area: locations;
+  }
+
+  .compare-tab > .favorites {
+    grid-area: favorites;
+  }
+}
+
+@media (min-width: 1200px) {
+  .current-tab {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    gap: calc(var(--space-section) * 1.5);
+  }
 }
 
 .coordinates-form {
-  background: rgba(255, 255, 255, 0.05);
-  padding: 2rem;
-  border-radius: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  padding: var(--space-section);
+  border-radius: var(--radius-md);
   width: 100%;
-  max-width: 400px;
 }
 
 .coordinates-form h2 {
@@ -67,45 +179,54 @@
 
 .form-group input {
   width: 100%;
+  min-height: var(--target-min);
   padding: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.1);
-  color: inherit;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
   font-size: 1rem;
   transition: border-color 0.3s;
 }
 
-.form-group input:focus {
-  outline: none;
-  border-color: #646cff;
-  background: rgba(255, 255, 255, 0.15);
+.form-group input:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+  border-color: var(--color-accent);
 }
 
 .form-buttons {
   display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
   justify-content: center;
   margin-top: 1.5rem;
 }
 
 .weather-display {
-  background: rgba(255, 255, 255, 0.05);
-  padding: 2rem;
-  border-radius: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  padding: var(--space-section);
+  border-radius: var(--radius-md);
   width: 100%;
-  max-width: 500px;
-  transition: all 0.3s;
 }
 
 .weather-display.frost-warning {
-  background: linear-gradient(135deg, rgba(147, 205, 255, 0.1), rgba(59, 130, 246, 0.1));
-  border: 2px solid rgba(147, 205, 255, 0.3);
+  border: 2px solid var(--color-accent);
+}
+
+.weather-display h2,
+.weather-map-section h2,
+.compare-editor h2,
+.compare-locations h2,
+.favorites h2 {
+  margin-top: 0;
+  margin-bottom: 1rem;
 }
 
 .frost-alert {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
   padding: 1rem;
   border-radius: 8px;
   margin-bottom: 1.5rem;
@@ -114,9 +235,11 @@
 }
 
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
   }
+
   50% {
     transform: scale(1.02);
   }
@@ -131,62 +254,117 @@
 
 .weather-item {
   display: flex;
+  align-items: center;
   justify-content: space-between;
+  gap: 1rem;
   padding: 0.75rem;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--color-surface-muted);
   border-radius: 8px;
 }
 
 .weather-item .label {
   font-weight: 500;
-  opacity: 0.8;
+  color: var(--color-text-muted);
 }
 
 .weather-item .value {
   font-weight: 600;
+  text-align: right;
 }
 
 .refresh-btn {
-  margin-top: 1.5rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-}
-
-.weather-loading {
-  padding: 2rem;
-}
-
-.spinner {
-  width: 40px;
-  height: 40px;
-  margin: 0 auto 1rem;
-  border: 3px solid rgba(255, 255, 255, 0.1);
-  border-top-color: #646cff;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-color: transparent;
 }
 
 .weather-error {
-  padding: 2rem;
-  background: rgba(255, 0, 0, 0.1);
-  border: 1px solid rgba(255, 0, 0, 0.3);
-  border-radius: 12px;
+  padding: var(--space-section);
+  background: var(--color-danger-surface);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  width: 100%;
 }
 
 .weather-error p {
-  color: #ff6b6b;
-  margin-bottom: 1rem;
+  color: var(--color-danger);
+  margin: 0 0 1rem;
+}
+
+.weather-empty {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+/* Skeletons are shaped like the content they stand in for and are inert for assistive tech. */
+.skeleton {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-muted) 0%,
+    var(--color-border) 50%,
+    var(--color-surface-muted) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton--text {
+  width: 100%;
+  height: 0.8rem;
+}
+
+.skeleton-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.error-fallback {
+  padding: var(--space-section);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-surface);
+  width: 100%;
+}
+
+.error-fallback__title {
+  margin: 0 0 0.5rem;
+  color: var(--color-danger);
+  font-size: 1.1rem;
+}
+
+.error-fallback__message {
+  margin: 0 0 1rem;
+  color: var(--color-text);
+}
+
+.error-fallback__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.error-fallback__retry {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-color: transparent;
 }
 
 .weather-map-section {
   width: 100%;
-  max-width: 900px;
 }
 
 .weather-map-section h2 {
@@ -195,18 +373,27 @@
 
 .weather-map-hint {
   font-size: 0.9rem;
-  opacity: 0.75;
-  margin-bottom: 1rem;
+  color: var(--color-text-muted);
+  margin: 0 0 1rem;
 }
 
 /* Leaflet renders 0px tall without an explicit height. */
 .weather-map {
-  height: 420px;
+  height: clamp(260px, 45vh, 480px);
   width: 100%;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   overflow: hidden;
-  border: 1px solid rgba(128, 128, 128, 0.35);
+  border: 1px solid var(--color-border);
   z-index: 0;
+}
+
+/* Leaflet's own zoom buttons are 30x30; grow them to the 44x44 target. The extra class keeps this
+   ahead of Leaflet's `.leaflet-touch .leaflet-bar a` rule without `!important`. */
+.weather-map-section .weather-map .leaflet-control-zoom a {
+  width: var(--target-min);
+  height: var(--target-min);
+  line-height: var(--target-min);
+  font-size: 1.4rem;
 }
 
 .temperature-marker-icon {
@@ -221,8 +408,8 @@
   width: 46px;
   height: 46px;
   border-radius: 50%;
-  border: 2px solid #ffffff;
-  color: #ffffff;
+  border: 2px solid var(--color-marker-text);
+  color: var(--color-marker-text);
   font-size: 0.75rem;
   font-weight: 700;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
@@ -232,34 +419,35 @@
   width: 16px;
   height: 16px;
   margin: 15px;
-  background: #64748b;
+  background: var(--color-text-muted);
   animation: pulse 1.5s infinite;
 }
 
+/* Marker fills: white 10px bold text keeps >= 5:1 on each of these. */
 .temperature-marker--freezing {
-  background: #1d4ed8;
+  background: var(--color-marker-freezing);
 }
 
 .temperature-marker--cold {
-  background: #0891b2;
+  background: var(--color-marker-cold);
 }
 
 .temperature-marker--mild {
-  background: #15803d;
+  background: var(--color-marker-mild);
 }
 
 .temperature-marker--warm {
-  background: #ea580c;
+  background: var(--color-marker-warm);
 }
 
 .temperature-marker--hot {
-  background: #dc2626;
+  background: var(--color-marker-hot);
 }
 
 .leaflet-popup-content-wrapper,
 .leaflet-popup-tip {
-  background: #1f2430;
-  color: #f4f6fb;
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 .weather-popup {
@@ -289,7 +477,7 @@
 
 .weather-popup__item dt {
   font-weight: 500;
-  opacity: 0.75;
+  color: var(--color-text-muted);
 }
 
 .weather-popup__item dd {
@@ -300,47 +488,496 @@
 .weather-popup__advisory {
   margin: 0.6rem 0 0;
   font-size: 0.85rem;
-  color: #93c5fd;
+  color: var(--color-accent);
 }
 
 .weather-popup--loading {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
+  gap: 0.5rem;
 }
 
 .weather-popup--error p {
   margin: 0 0 0.5rem;
-  color: #ffb4b4;
+  color: var(--color-danger);
 }
 
 .weather-popup button {
   margin-top: 0.6rem;
 }
 
-@media (max-width: 640px) {
-  .weather-map {
-    height: 320px;
-  }
+.weather-popup__compare {
+  display: block;
+  width: 100%;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-color: transparent;
 }
 
-@media (prefers-color-scheme: light) {
-  .server-status {
-    background: rgba(0, 128, 0, 0.1);
-    border-color: rgba(0, 128, 0, 0.3);
-    color: #008000;
+.weather-popup__compare:disabled {
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+.weather-popup__hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.tab-nav {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.tab-nav__tab {
+  padding: 0.6rem 1.4rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.tab-nav__tab--active {
+  background: var(--color-accent);
+  border-color: transparent;
+  color: var(--color-accent-contrast);
+}
+
+.compare-editor,
+.compare-locations,
+.favorites {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-section);
+}
+
+.compare-count {
+  margin: 0 0 1rem;
+  color: var(--color-text-muted);
+}
+
+.compare-message {
+  margin: 1rem 0 0;
+  padding: 0.6rem 0.9rem;
+  border-radius: 8px;
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
+.compare-locations__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.compare-locations__header h2 {
+  margin: 0;
+}
+
+.compare-refresh {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  border-color: transparent;
+}
+
+.compare-empty,
+.favorites-empty {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.compare-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.compare-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.35rem 0.35rem 0.75rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  font-size: 0.85rem;
+}
+
+.compare-chip button {
+  min-width: var(--target-min);
+  min-height: var(--target-min);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.comparison-table-wrapper {
+  overflow-x: auto;
+  /* A positioned wrapper keeps the absolutely positioned .sr-only labels inside the scroll area,
+     so they cannot extend the page's scrollable width. */
+  position: relative;
+}
+
+.comparison-table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 480px;
+  font-size: 0.9rem;
+}
+
+.comparison-table caption {
+  text-align: left;
+}
+
+.comparison-table th,
+.comparison-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.comparison-table thead th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-muted);
+}
+
+/* Sticky metric column so the row labels stay readable while the table scrolls sideways. */
+.comparison-table th[scope='row'] {
+  position: sticky;
+  left: 0;
+  background: var(--color-surface);
+  font-weight: 600;
+  min-width: 120px;
+}
+
+.comparison-cell--freezing {
+  color: var(--color-band-freezing);
+}
+
+.comparison-cell--cold {
+  color: var(--color-band-cold);
+}
+
+.comparison-cell--mild {
+  color: var(--color-band-mild);
+}
+
+.comparison-cell--warm {
+  color: var(--color-band-warm);
+}
+
+.comparison-cell--hot {
+  color: var(--color-band-hot);
+}
+
+.comparison-cell--warmest {
+  background: var(--color-highlight-warm);
+}
+
+.comparison-cell--coldest {
+  background: var(--color-highlight-cold);
+}
+
+.comparison-cell--highest-humidity {
+  background: var(--color-highlight-humid);
+}
+
+.comparison-cell--lowest-humidity {
+  background: var(--color-highlight-dry);
+}
+
+.comparison-missing {
+  color: var(--color-text-muted);
+}
+
+.comparison-skeleton {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.comparison-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-danger);
+}
+
+.favorites-save {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.favorites-save label {
+  font-weight: 500;
+}
+
+.favorites-save input {
+  flex: 1;
+  min-width: 160px;
+  min-height: var(--target-min);
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.favorites-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.favorites-list__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: var(--color-surface-muted);
+}
+
+.favorites-list__details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  text-align: left;
+}
+
+.favorites-list__name {
+  font-weight: 600;
+}
+
+.favorites-list__meta {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.favorites-list__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.form-error {
+  margin: 0 0 1rem;
+  color: var(--color-danger);
+  font-size: 0.9rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.notification-bell {
+  position: relative;
+  display: inline-flex;
+  justify-content: flex-end;
+}
+
+.notification-bell__button {
+  position: relative;
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 0;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.notification-bell__badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-danger);
+  color: var(--color-surface);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+.notification-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  width: min(340px, 90vw);
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-panel);
+  text-align: left;
+  z-index: 20;
+}
+
+.notification-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.notification-panel__alert {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.35rem 0.6rem;
+  width: 100%;
+  padding: 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+  text-align: left;
+}
+
+.notification-panel__type {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-band-cold);
+}
+
+.notification-panel__type--extreme-heat {
+  color: var(--color-band-warm);
+}
+
+.notification-panel__type--extreme-cold {
+  color: var(--color-band-freezing);
+}
+
+.notification-panel__type--temperature-change {
+  color: var(--color-accent);
+}
+
+.notification-panel__title {
+  font-weight: 600;
+}
+
+.notification-panel__time {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.notification-panel__body {
+  grid-column: 1 / -1;
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.notification-panel__empty {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.notification-panel__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.notification-settings {
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.notification-settings__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.notification-settings__thresholds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.notification-settings__thresholds label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.78rem;
+}
+
+.notification-settings__thresholds input {
+  width: 72px;
+  min-height: var(--target-min);
+  padding: 0.3rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+@media (max-width: 640px) {
+  #root {
+    padding: 1rem;
   }
 
-  .form-group input {
-    border-color: rgba(0, 0, 0, 0.2);
-    background: rgba(0, 0, 0, 0.05);
+  .app-header {
+    align-items: flex-start;
   }
 
-  .weather-display {
-    background: rgba(0, 0, 0, 0.05);
+  .tab-nav {
+    flex-wrap: wrap;
   }
 
-  .weather-item {
-    background: rgba(0, 0, 0, 0.05);
+  .tab-nav__tab {
+    flex: 1 1 auto;
+  }
+
+  .form-buttons button {
+    flex: 1 1 100%;
   }
 }

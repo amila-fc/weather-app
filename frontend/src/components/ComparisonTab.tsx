@@ -1,0 +1,158 @@
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import type { Coordinates } from '../api/weatherClient';
+import { MAX_COMPARISON_LOCATIONS } from '../hooks/useComparisonLocations';
+import type { AddLocationResult, ComparisonLocationsState } from '../hooks/useComparisonLocations';
+import { useFavoriteCombinations } from '../hooks/useFavoriteCombinations';
+import type { SaveFavoriteResult } from '../hooks/useFavoriteCombinations';
+import { formatLocationLabel } from '../utils/coordinates';
+import { ComparisonTable } from './ComparisonTable';
+import { LocationPicker } from './LocationPicker';
+
+const ADD_MESSAGES: Record<AddLocationResult, string | null> = {
+  added: null,
+  duplicate: 'That location is already in the comparison.',
+  'limit-reached': `You can compare a maximum of ${MAX_COMPARISON_LOCATIONS} locations.`,
+  invalid: 'Enter a latitude between -90 and 90 and a longitude between -180 and 180.',
+};
+
+const SAVE_MESSAGES: Record<SaveFavoriteResult, string> = {
+  saved: 'Combination saved to your favorites.',
+  'invalid-name': 'Enter a name for the combination.',
+  'invalid-locations': 'Add between 1 and 5 valid locations before saving.',
+  'duplicate-locations': 'A favorite cannot contain the same location twice.',
+  'storage-error': 'Could not save to this browser storage.',
+};
+
+export const ComparisonTab: React.FC<{ comparison: ComparisonLocationsState }> = ({ comparison }) => {
+  const { locations, add, remove, replaceAll } = comparison;
+  const { favorites, save, load, remove: removeFavorite } = useFavoriteCombinations();
+  const queryClient = useQueryClient();
+  const [message, setMessage] = useState<string | null>(null);
+  const [favoriteName, setFavoriteName] = useState('');
+
+  const addLocation = (coordinates: Coordinates) => {
+    setMessage(ADD_MESSAGES[add(coordinates)]);
+  };
+
+  const saveFavorite = () => {
+    const result = save(
+      favoriteName,
+      locations.map((location) => ({ lat: location.lat, lng: location.lng })),
+    );
+    setMessage(SAVE_MESSAGES[result]);
+    if (result === 'saved') {
+      setFavoriteName('');
+    }
+  };
+
+  const loadFavorite = (id: string) => {
+    const restored = load(id);
+    if (restored) {
+      replaceAll(restored);
+      setMessage('Combination loaded.');
+    }
+  };
+
+  const refreshAll = () => {
+    void queryClient.invalidateQueries({ queryKey: ['weather'] });
+  };
+
+  return (
+    <div id="tabpanel-compare" role="tabpanel" aria-labelledby="tab-compare" className="compare-tab">
+      <section className="compare-editor">
+        <h2>Add a location</h2>
+        <p className="compare-count">
+          {locations.length}/{MAX_COMPARISON_LOCATIONS} locations
+        </p>
+        <LocationPicker onSelect={addLocation} submitLabel="Add to comparison" />
+        {message && (
+          <p className="compare-message" role="status">
+            {message}
+          </p>
+        )}
+      </section>
+
+      <section className="compare-locations">
+        <div className="compare-locations__header">
+          <h2>Comparison</h2>
+          <button
+            type="button"
+            className="compare-refresh"
+            onClick={refreshAll}
+            disabled={locations.length === 0}
+          >
+            Refresh all
+          </button>
+        </div>
+
+        {locations.length === 0 ? (
+          <p className="compare-empty">
+            Add up to {MAX_COMPARISON_LOCATIONS} locations to compare their weather side by side.
+          </p>
+        ) : (
+          <>
+            <ul className="compare-chips">
+              {locations.map((location) => (
+                <li key={location.id} className="compare-chip">
+                  <span>{formatLocationLabel(location)}</span>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${formatLocationLabel(location)}`}
+                    onClick={() => remove(location.id)}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <ComparisonTable locations={locations} />
+          </>
+        )}
+      </section>
+
+      <section className="favorites">
+        <h2>Saved combinations</h2>
+        <div className="favorites-save">
+          <label htmlFor="favorite-name">Name</label>
+          <input
+            id="favorite-name"
+            value={favoriteName}
+            onChange={(event) => setFavoriteName(event.target.value)}
+            placeholder="Home &amp; Work"
+          />
+          <button type="button" onClick={saveFavorite}>
+            Save combination
+          </button>
+        </div>
+
+        {favorites.length === 0 ? (
+          <p className="favorites-empty">No saved combinations yet.</p>
+        ) : (
+          <ul className="favorites-list">
+            {favorites.map((favorite) => (
+              <li key={favorite.id} className="favorites-list__item">
+                <div className="favorites-list__details">
+                  <span className="favorites-list__name">{favorite.name}</span>
+                  <span className="favorites-list__meta">
+                    {favorite.locations.length} location
+                    {favorite.locations.length === 1 ? '' : 's'} · saved{' '}
+                    {favorite.savedAt.slice(0, 10)}
+                  </span>
+                </div>
+                <div className="favorites-list__actions">
+                  <button type="button" onClick={() => loadFavorite(favorite.id)}>
+                    Load
+                  </button>
+                  <button type="button" onClick={() => removeFavorite(favorite.id)}>
+                    Delete
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+};

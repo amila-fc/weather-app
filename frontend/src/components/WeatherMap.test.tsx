@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { WeatherMap } from './WeatherMap';
 import { weatherApi } from '../api/weatherClient';
@@ -54,6 +55,7 @@ const weather = (temperature: number): WeatherData => ({
 
 const renderMap = (overrides?: { coordinates?: Coordinates; points?: Coordinates[] }) => {
   const onSelect = vi.fn();
+  const onCompare = vi.fn();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const utils = render(
     <QueryClientProvider client={queryClient}>
@@ -61,10 +63,11 @@ const renderMap = (overrides?: { coordinates?: Coordinates; points?: Coordinates
         coordinates={overrides?.coordinates ?? POINT}
         points={overrides?.points ?? [POINT]}
         onSelect={onSelect}
+        onCompare={onCompare}
       />
     </QueryClientProvider>,
   );
-  return { ...utils, onSelect };
+  return { ...utils, onSelect, onCompare };
 };
 
 describe('WeatherMap', () => {
@@ -131,16 +134,38 @@ describe('WeatherMap', () => {
     const onSelect = vi.fn();
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
-        <WeatherMap coordinates={{ lat: 10, lng: 20 }} points={[]} onSelect={onSelect} />
+        <WeatherMap coordinates={{ lat: 10, lng: 20 }} points={[]} onSelect={onSelect} onCompare={vi.fn()} />
       </QueryClientProvider>,
     );
 
     rerender(
       <QueryClientProvider client={queryClient}>
-        <WeatherMap coordinates={{ lat: 30, lng: 40 }} points={[]} onSelect={onSelect} />
+        <WeatherMap coordinates={{ lat: 30, lng: 40 }} points={[]} onSelect={onSelect} onCompare={vi.fn()} />
       </QueryClientProvider>,
     );
 
     expect(leaflet.flyTo).toHaveBeenCalledWith([30, 40]);
+  });
+
+  it('keeps the popup compare action disabled for a single pinned point', async () => {
+    getWeather.mockResolvedValue(weather(55));
+
+    renderMap();
+
+    expect(await screen.findByRole('button', { name: /compare these 1 locations/i })).toBeDisabled();
+  });
+
+  it('compares the pinned points from the popup once two are selected', async () => {
+    getWeather.mockResolvedValue(weather(55));
+    const otherPoint: Coordinates = { lat: 40.7128, lng: -74.006 };
+
+    const { onCompare } = renderMap({ points: [POINT, otherPoint] });
+
+    const compareButtons = await screen.findAllByRole('button', { name: /compare these 2 locations/i });
+    expect(compareButtons[0]).toBeEnabled();
+
+    await userEvent.click(compareButtons[0]);
+
+    expect(onCompare).toHaveBeenCalledTimes(1);
   });
 });

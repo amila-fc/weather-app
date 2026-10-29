@@ -16,17 +16,17 @@ const COORDINATES = { lat: 37.7749, lng: -122.4194 };
 
 const WEATHER: WeatherData = {
   temperature: 55,
-  humidity: 60,
+  humidity: 80.076106174296,
   description: 'Clear',
   apparentTemperature: 53,
   summary: 'Clear skies',
 };
 
-const renderPopup = () => {
+const renderPopup = (overrides?: { compareCount?: number; onCompare?: () => void }) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <WeatherPopup coordinates={COORDINATES} />
+      <WeatherPopup coordinates={COORDINATES} {...overrides} />
     </QueryClientProvider>,
   );
 };
@@ -51,7 +51,7 @@ describe('WeatherPopup', () => {
 
     expect(await screen.findByText('55°F')).toBeInTheDocument();
     expect(screen.getByText('53°F')).toBeInTheDocument();
-    expect(screen.getByText('60%')).toBeInTheDocument();
+    expect(screen.getByText('80%')).toBeInTheDocument();
     expect(screen.getByText('Clear')).toBeInTheDocument();
     expect(screen.getByText('averaged')).toBeInTheDocument();
   });
@@ -82,5 +82,29 @@ describe('WeatherPopup', () => {
     expect(await screen.findByText('55°F')).toBeInTheDocument();
     expect(getWeather).toHaveBeenCalledTimes(2);
     expect(getWeather).toHaveBeenLastCalledWith(COORDINATES);
+  });
+
+  it('disables the compare action until 2 locations are selected', async () => {
+    getWeather.mockResolvedValue(WEATHER);
+
+    renderPopup({ compareCount: 1 });
+
+    const compareButton = await screen.findByRole('button', { name: /compare these 1 locations/i });
+    expect(compareButton).toBeDisabled();
+    expect(screen.getByText(/select 2 to 5 map locations/i)).toBeInTheDocument();
+  });
+
+  it('compares the selected locations once 2 to 5 are pinned', async () => {
+    getWeather.mockResolvedValue(WEATHER);
+    const onCompare = vi.fn();
+
+    renderPopup({ compareCount: 3, onCompare });
+
+    const compareButton = await screen.findByRole('button', { name: /compare these 3 locations/i });
+    expect(compareButton).toBeEnabled();
+    expect(screen.queryByText(/select 2 to 5 map locations/i)).not.toBeInTheDocument();
+
+    await userEvent.click(compareButton);
+    expect(onCompare).toHaveBeenCalledTimes(1);
   });
 });
