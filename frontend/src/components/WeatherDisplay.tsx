@@ -1,20 +1,32 @@
+import { memo, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { weatherApi, Coordinates } from '../api/weatherClient';
+import { weatherQueryOptions } from '../api/weatherQuery';
 import { formatHumidity } from '../utils/format';
+import { recordRender } from '../utils/renderCount';
+import { weatherIconFor, weatherIconLabel, weatherIconSource } from '../utils/weatherIcons';
+import { ProgressiveImage } from './ProgressiveImage';
 import { SkeletonBlock } from './Skeleton';
 
 interface WeatherDisplayProps {
-  coordinates: Coordinates;
+  latitude: number;
+  longitude: number;
 }
 
 const SKELETON_ROWS = ['Temperature', 'Feels Like', 'Humidity', 'Description'];
 
-export const WeatherDisplay: React.FC<WeatherDisplayProps> = ({ coordinates }) => {
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['weather', coordinates.lat, coordinates.lng],
-    queryFn: () => weatherApi.getWeather(coordinates),
-    enabled: !!coordinates.lat && !!coordinates.lng,
-  });
+const CONDITION_ICON_SIZE = 56;
+
+/**
+ * Memoised on primitive props: the current-weather tab re-renders on every map click, while the selected
+ * location usually stays the same.
+ */
+export const WeatherDisplay: React.FC<WeatherDisplayProps> = memo(function WeatherDisplay({
+  latitude,
+  longitude,
+}) {
+  const coordinates = useMemo(() => ({ lat: latitude, lng: longitude }), [latitude, longitude]);
+  recordRender('weather-display');
+  const { data, isLoading, error, refetch } = useQuery(weatherQueryOptions(coordinates));
 
   if (isLoading) {
     return (
@@ -51,6 +63,7 @@ export const WeatherDisplay: React.FC<WeatherDisplayProps> = ({ coordinates }) =
   }
 
   const isFrosty = data.temperature < 32; // Fahrenheit
+  const conditionIcon = weatherIconFor(data.description);
 
   return (
     <div className={`weather-display ${isFrosty ? 'frost-warning' : ''}`}>
@@ -58,6 +71,16 @@ export const WeatherDisplay: React.FC<WeatherDisplayProps> = ({ coordinates }) =
       <p className="sr-only" role="status" aria-live="polite">
         Current temperature {Math.round(data.temperature)} degrees Fahrenheit, {data.description}
       </p>
+      <ProgressiveImage
+        className="weather-display__icon"
+        src={weatherIconSource(conditionIcon)}
+        alt={weatherIconLabel(conditionIcon)}
+        width={CONDITION_ICON_SIZE}
+        height={CONDITION_ICON_SIZE}
+      />
+      {data.fromLocalCache && (
+        <p className="weather-display__cached">Showing saved weather from your last visit.</p>
+      )}
       {isFrosty && (
         <div className="frost-alert">
           ❄️ Frost Warning: Temperature below freezing!
@@ -92,4 +115,4 @@ export const WeatherDisplay: React.FC<WeatherDisplayProps> = ({ coordinates }) =
       </button>
     </div>
   );
-};
+});

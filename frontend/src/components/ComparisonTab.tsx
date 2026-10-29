@@ -1,13 +1,18 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Coordinates } from '../api/weatherClient';
+import { useVirtualList } from '../hooks/useVirtualList';
 import { MAX_COMPARISON_LOCATIONS } from '../hooks/useComparisonLocations';
 import type { AddLocationResult, ComparisonLocationsState } from '../hooks/useComparisonLocations';
 import { useFavoriteCombinations } from '../hooks/useFavoriteCombinations';
-import type { SaveFavoriteResult } from '../hooks/useFavoriteCombinations';
+import type { FavoriteCombination, SaveFavoriteResult } from '../hooks/useFavoriteCombinations';
 import { formatLocationLabel } from '../utils/coordinates';
 import { ComparisonTable } from './ComparisonTable';
 import { LocationPicker } from './LocationPicker';
+
+const FAVORITE_ROW_ESTIMATE_PX = 64;
+
+const favoriteKey = (favorite: FavoriteCombination) => favorite.id;
 
 const ADD_MESSAGES: Record<AddLocationResult, string | null> = {
   added: null,
@@ -31,11 +36,21 @@ export const ComparisonTab: React.FC<{ comparison: ComparisonLocationsState }> =
   const [message, setMessage] = useState<string | null>(null);
   const [favoriteName, setFavoriteName] = useState('');
 
-  const addLocation = (coordinates: Coordinates) => {
-    setMessage(ADD_MESSAGES[add(coordinates)]);
-  };
+  const { isVirtualized, containerRef, rows, totalSize, onFocusCapture, onBlurCapture } =
+    useVirtualList<FavoriteCombination, HTMLUListElement>({
+      items: favorites,
+      estimateSize: FAVORITE_ROW_ESTIMATE_PX,
+      getKey: favoriteKey,
+    });
 
-  const saveFavorite = () => {
+  const addLocation = useCallback(
+    (coordinates: Coordinates) => {
+      setMessage(ADD_MESSAGES[add(coordinates)]);
+    },
+    [add],
+  );
+
+  const saveFavorite = useCallback(() => {
     const result = save(
       favoriteName,
       locations.map((location) => ({ lat: location.lat, lng: location.lng })),
@@ -44,19 +59,22 @@ export const ComparisonTab: React.FC<{ comparison: ComparisonLocationsState }> =
     if (result === 'saved') {
       setFavoriteName('');
     }
-  };
+  }, [favoriteName, locations, save]);
 
-  const loadFavorite = (id: string) => {
-    const restored = load(id);
-    if (restored) {
-      replaceAll(restored);
-      setMessage('Combination loaded.');
-    }
-  };
+  const loadFavorite = useCallback(
+    (id: string) => {
+      const restored = load(id);
+      if (restored) {
+        replaceAll(restored);
+        setMessage('Combination loaded.');
+      }
+    },
+    [load, replaceAll],
+  );
 
-  const refreshAll = () => {
+  const refreshAll = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['weather'] });
-  };
+  }, [queryClient]);
 
   return (
     <div id="tabpanel-compare" role="tabpanel" aria-labelledby="tab-compare" className="compare-tab">
@@ -129,22 +147,39 @@ export const ComparisonTab: React.FC<{ comparison: ComparisonLocationsState }> =
         {favorites.length === 0 ? (
           <p className="favorites-empty">No saved combinations yet.</p>
         ) : (
-          <ul className="favorites-list">
-            {favorites.map((favorite) => (
-              <li key={favorite.id} className="favorites-list__item">
+          <ul
+            ref={containerRef}
+            className={`favorites-list${isVirtualized ? ' favorites-list--virtual' : ''}`}
+            style={isVirtualized ? { height: totalSize } : undefined}
+            onFocus={onFocusCapture}
+            onBlur={onBlurCapture}
+          >
+            {rows.map((row) => (
+              <li
+                key={row.key}
+                data-index={row.index}
+                className="favorites-list__item"
+                aria-posinset={isVirtualized ? row.index + 1 : undefined}
+                aria-setsize={isVirtualized ? favorites.length : undefined}
+                style={
+                  isVirtualized
+                    ? { position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${row.start}px)` }
+                    : undefined
+                }
+              >
                 <div className="favorites-list__details">
-                  <span className="favorites-list__name">{favorite.name}</span>
+                  <span className="favorites-list__name">{row.item.name}</span>
                   <span className="favorites-list__meta">
-                    {favorite.locations.length} location
-                    {favorite.locations.length === 1 ? '' : 's'} · saved{' '}
-                    {favorite.savedAt.slice(0, 10)}
+                    {row.item.locations.length} location
+                    {row.item.locations.length === 1 ? '' : 's'} · saved{' '}
+                    {row.item.savedAt.slice(0, 10)}
                   </span>
                 </div>
                 <div className="favorites-list__actions">
-                  <button type="button" onClick={() => loadFavorite(favorite.id)}>
+                  <button type="button" onClick={() => loadFavorite(row.item.id)}>
                     Load
                   </button>
-                  <button type="button" onClick={() => removeFavorite(favorite.id)}>
+                  <button type="button" onClick={() => removeFavorite(row.item.id)}>
                     Delete
                   </button>
                 </div>

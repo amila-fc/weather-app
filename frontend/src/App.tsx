@@ -1,9 +1,9 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ComparisonTab } from './components/ComparisonTab';
 import { CurrentWeatherTab } from './components/CurrentWeatherTab';
 import { ErrorBoundary, ErrorFallback } from './components/ErrorBoundary';
 import { NotificationBell } from './components/NotificationBell';
+import { OfflineBanner } from './components/OfflineBanner';
 import { SkeletonBlock } from './components/Skeleton';
 import { TabNav } from './components/TabNav';
 import type { AppTab } from './components/TabNav';
@@ -13,11 +13,25 @@ import { useWeatherWatch } from './hooks/useWeatherWatch';
 import { ActiveLocationProvider, useActiveLocation } from './state/ActiveLocationContext';
 import type { Coordinates } from './api/weatherClient';
 import { weatherApi } from './api/weatherClient';
+import type { WeatherAlert } from './utils/alerts';
 import './App.css';
 
 // The dashboard pulls in the chart and dashboard widgets, so it is only downloaded when the tab is opened.
 const TrendsTab = lazy(() =>
   import('./components/TrendsTab').then((module) => ({ default: module.TrendsTab })),
+);
+
+// The comparison view (picker, table, favorites) is not needed until the tab is opened either.
+const ComparisonTab = lazy(() =>
+  import('./components/ComparisonTab').then((module) => ({ default: module.ComparisonTab })),
+);
+
+const TabSkeleton: React.FC<{ label: string }> = ({ label }) => (
+  <div aria-busy="true">
+    <span className="sr-only">{label}</span>
+    <SkeletonBlock width="40%" height="1.25rem" />
+    <SkeletonBlock width="100%" height="160px" />
+  </div>
 );
 
 const TAB_HASHES: Record<AppTab, string> = {
@@ -42,6 +56,7 @@ const reloadPage = () => window.location.reload();
 function AppContent() {
   const [activeTab, setActiveTab] = useState<AppTab>(tabFromHash);
   const comparison = useComparisonLocations();
+  const replaceComparisonLocations = comparison.replaceAll;
   const { setLocation } = useActiveLocation();
 
   useWeatherWatch();
@@ -58,16 +73,28 @@ function AppContent() {
     queryFn: weatherApi.getStatus,
   });
 
-  const selectTab = (tab: AppTab) => {
+  const selectTab = useCallback((tab: AppTab) => {
     setActiveTab(tab);
     window.location.hash = TAB_HASHES[tab];
-  };
+  }, []);
 
   // A map pin popup hands its selected points straight to the comparison tab.
-  const compareMapLocations = (locations: Coordinates[]) => {
-    comparison.replaceAll(locations);
-    selectTab('compare');
-  };
+  const compareMapLocations = useCallback(
+    (locations: Coordinates[]) => {
+      replaceComparisonLocations(locations);
+      setActiveTab('compare');
+      window.location.hash = TAB_HASHES.compare;
+    },
+    [replaceComparisonLocations],
+  );
+
+  const selectAlertLocation = useCallback(
+    (alert: WeatherAlert) => {
+      setLocation(alert.coordinates);
+      selectTab('current');
+    },
+    [selectTab, setLocation],
+  );
 
   return (
     <div className="app">
@@ -82,14 +109,11 @@ function AppContent() {
         </div>
         <div className="app-header__actions">
           <ThemeToggle />
-          <NotificationBell
-            onSelectAlert={(alert) => {
-              setLocation(alert.coordinates);
-              selectTab('current');
-            }}
-          />
+          <NotificationBell onSelectAlert={selectAlertLocation} />
         </div>
       </header>
+
+      <OfflineBanner />
 
       <nav className="app-nav" aria-label="Weather views">
         <TabNav activeTab={activeTab} onSelect={selectTab} />
@@ -113,19 +137,15 @@ function AppContent() {
         >
           {activeTab === 'current' && <CurrentWeatherTab onCompare={compareMapLocations} />}
           {activeTab === 'trends' && (
-            <Suspense
-              fallback={
-                <div className="trends-tab" aria-busy="true">
-                  <span className="sr-only">Loading the trends dashboard…</span>
-                  <SkeletonBlock width="40%" height="1.25rem" />
-                  <SkeletonBlock width="100%" height="160px" />
-                </div>
-              }
-            >
+            <Suspense fallback={<TabSkeleton label="Loading the trends dashboard…" />}>
               <TrendsTab />
             </Suspense>
           )}
-          {activeTab === 'compare' && <ComparisonTab comparison={comparison} />}
+          {activeTab === 'compare' && (
+            <Suspense fallback={<TabSkeleton label="Loading the comparison view…" />}>
+              <ComparisonTab comparison={comparison} />
+            </Suspense>
+          )}
         </ErrorBoundary>
       </main>
     </div>

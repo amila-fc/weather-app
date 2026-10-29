@@ -104,6 +104,8 @@ describe('App', () => {
 
   it('turns a map click into one request for the rounded coordinates', async () => {
     renderApp();
+    // The map is a lazy chunk, so the click handler only exists once it has loaded.
+    await screen.findByTestId('map');
 
     act(() => {
       leaflet.click?.({ latlng: { lat: 40.71281234, lng: -74.00601111 } });
@@ -136,17 +138,17 @@ describe('App', () => {
     await userEvent.click(compareTab);
 
     expect(screen.getByRole('tab', { name: 'Compare' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByText('0/5 locations')).toBeInTheDocument();
+    expect(await screen.findByText('0/5 locations')).toBeInTheDocument();
     expect(window.location.hash).toBe('#compare');
   });
 
-  it('opens the comparison tab when the hash already points at it', () => {
+  it('opens the comparison tab when the hash already points at it', async () => {
     window.location.hash = '#compare';
 
     renderApp();
 
     expect(screen.getByRole('tab', { name: 'Compare' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByText('0/5 locations')).toBeInTheDocument();
+    expect(await screen.findByText('0/5 locations')).toBeInTheDocument();
     expect(screen.queryByText('Explore the map')).not.toBeInTheDocument();
   });
 
@@ -158,7 +160,9 @@ describe('App', () => {
     expect(window.location.hash).toBe('#trends');
     expect(screen.getByRole('tab', { name: 'Trends' })).toHaveAttribute('aria-selected', 'true');
     expect(await screen.findByRole('heading', { name: '24-hour trends' })).toBeInTheDocument();
-    expect(getTrends).toHaveBeenCalledWith({ lat: 37.7749, lng: -122.4194 }, 24);
+    await waitFor(() =>
+      expect(getTrends).toHaveBeenCalledWith({ lat: 37.7749, lng: -122.4194 }, 24),
+    );
   });
 
   it('restores the trends tab from the hash on reload', async () => {
@@ -246,6 +250,17 @@ describe('App', () => {
     expect(screen.getByRole('tab', { name: 'Current weather' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByLabelText(/latitude/i)).toHaveValue(40.7128);
     expect(screen.getByLabelText(/longitude/i)).toHaveValue(-74.006);
+  });
+
+  it('shows the offline banner in the app shell when the connection drops', async () => {
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+    try {
+      renderApp();
+
+      expect(await screen.findByText(/offline — showing saved weather/i)).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+    }
   });
 
   it('shows the theme toggle next to the bell and switches the document theme', async () => {

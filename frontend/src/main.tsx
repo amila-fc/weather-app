@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App.tsx'
 import { ErrorBoundary, ErrorFallback } from './components/ErrorBoundary'
 import { ThemeProvider } from './theme/ThemeProvider'
-import 'leaflet/dist/leaflet.css'
 import './index.css'
 
 const queryClient = new QueryClient({

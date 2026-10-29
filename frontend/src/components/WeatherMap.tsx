@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import { Coordinates } from '../api/weatherClient';
 import { useWeatherQuery } from '../api/weatherQuery';

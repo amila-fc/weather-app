@@ -4,8 +4,12 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ComparisonTab } from './ComparisonTab';
 import { useComparisonLocations } from '../hooks/useComparisonLocations';
+import { FAVORITES_STORAGE_KEY } from '../hooks/useFavoriteCombinations';
+import { VIRTUALIZE_THRESHOLD } from '../hooks/useVirtualList';
 import { weatherApi } from '../api/weatherClient';
 import type { WeatherData } from '../api/weatherClient';
+import { renderCount } from '../utils/renderCount';
+import { stubVirtualViewport } from '../test/virtualViewport';
 
 vi.mock('../api/weatherClient', () => ({
   weatherApi: { getWeather: vi.fn(), getStatus: vi.fn() },
@@ -140,5 +144,47 @@ describe('ComparisonTab', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Enter a name for the combination');
     expect(screen.queryByRole('button', { name: 'Load' })).not.toBeInTheDocument();
+  });
+
+  it('virtualises a long favorites list so only a window of rows is rendered', () => {
+    const restoreViewport = stubVirtualViewport(320);
+    const combinations = Array.from({ length: 120 }, (_, index) => ({
+      id: `favorite-${index}`,
+      name: `Favorite ${index}`,
+      savedAt: '2026-10-01T00:00:00.000Z',
+      locations: [{ lat: 40 + index * 0.01, lng: -70 }],
+    }));
+    window.localStorage.setItem(
+      FAVORITES_STORAGE_KEY,
+      JSON.stringify({ version: 1, combinations }),
+    );
+
+    try {
+      renderTab();
+
+      const favoritesSection = screen
+        .getByRole('heading', { name: 'Saved combinations' })
+        .closest('section') as HTMLElement;
+      const rows = within(favoritesSection).getAllByRole('listitem');
+
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.length).toBeLessThan(VIRTUALIZE_THRESHOLD);
+      expect(rows[0]).toHaveAttribute('aria-setsize', '120');
+      expect(rows[0]).toHaveAttribute('aria-posinset', '1');
+    } finally {
+      restoreViewport();
+    }
+  });
+
+  it('does not re-render the comparison cells while the favourite name is being typed', async () => {
+    renderTab();
+    await addLocation('47', '8');
+    await screen.findByText('55°F');
+
+    const before = renderCount('comparison-cell');
+
+    await userEvent.type(screen.getByLabelText('Name'), 'Home');
+
+    expect(renderCount('comparison-cell')).toBe(before);
   });
 });

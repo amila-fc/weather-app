@@ -101,17 +101,22 @@ weather-app/
 ├── frontend/                # React application
 │   ├── build.gradle.kts    # Frontend build configuration
 │   ├── package.json        # NPM dependencies
-│   ├── vite.config.ts      # Vite configuration
-│   └── src/
-│       ├── App.tsx         # Main application component
+│   ├── vite.config.ts      # Vite configuration (PWA, manualChunks, analyse plugin)
+│   ├── scripts/
+│   │   └── check-bundle-size.mjs # Initial-JS gzip budget gate (200 KB)
+│   ├── src/
+│       ├── App.tsx         # Main application component (lazy tabs, offline banner)
 │       ├── api/
 │       │   ├── weatherClient.ts  # API client
-│       │   └── weatherQuery.ts   # Shared ['weather', lat, lng] query options
+│       │   └── weatherQuery.ts   # Shared ['weather', lat, lng] query options + offline cache wiring
+│       ├── assets/weather/ # Local condition icons (SVG)
 │       ├── hooks/
 │       │   ├── useComparisonLocations.ts  # Comparison set: cap, dedupe, validation
 │       │   ├── useFavoriteCombinations.ts # localStorage favorites
 │       │   ├── useAlerts.ts               # Session alert store (dedupe, unread count)
 │       │   ├── useNotificationPreferences.ts # localStorage notification preferences
+│       │   ├── useOnlineStatus.ts         # navigator.onLine + online/offline events
+│       │   ├── useVirtualList.ts          # @tanstack/react-virtual wrapper + 20-item threshold
 │       │   └── useWeatherWatch.ts         # 15-minute polling that raises alerts
 │       ├── state/
 │       │   └── ActiveLocationContext.tsx  # Active location shared by header and tab
@@ -121,11 +126,18 @@ weather-app/
 │       │   ├── comparison.ts     # Warmest/coldest and humidity highlights
 │       │   ├── alerts.ts         # Alert rules (frost, extremes, change) + ids
 │       │   ├── browserNotifications.ts # Guarded Notification API wrapper
+│       │   ├── persistentWeatherCache.ts # TTL'd, LRU-bounded localStorage weather cache
+│       │   ├── renderCount.ts    # Dev-only render probe for the memoisation tests
+│       │   ├── weatherIcons.ts    # Description → local icon mapping
 │       │   └── format.ts         # Humidity rounding, relative time
 │       ├── test/
-│       │   └── setup.ts          # Testing Library matchers for Vitest
+│       │   ├── setup.ts          # Testing Library matchers, globals and per-test resets
+│       │   └── virtualViewport.ts # client size stub for the virtualized suites (jsdom has no layout)
 │       └── components/
 │           ├── App tabs: TabNav.tsx, CurrentWeatherTab.tsx, ComparisonTab.tsx
+│           ├── OfflineBanner.tsx  # "You're offline — showing saved weather"
+│           ├── ProgressiveImage.tsx # Placeholder → lazy image, IO gating, text fallback
+│           ├── NotificationRow.tsx # Memoised alert row
 │           ├── WeatherDisplay.tsx # Weather display component
 │           ├── WeatherMap.tsx     # Leaflet map, click-to-fetch, coloured markers
 │           ├── WeatherPopup.tsx   # Map popup with loading/error states
@@ -213,7 +225,8 @@ weather-app/
     `weather-app:notification-preferences:v1` (thresholds included; nothing else is stored)
   - Browser notifications are opt-in from the settings panel (permission is only requested from that click) and use
     the alert id as the toast `tag`; with permission denied or unsupported the alerts still list in-app
-  - Known limitation: the watch is polling, not push — with the tab closed nothing fires (no service worker)
+  - Known limitation: the watch is polling, not push — with the tab closed nothing fires. The service worker
+    (see *Offline support*) caches responses and the app shell but performs no background sync
   - Frost warning alerts (temperature < 32°F)
   - Manual coordinate entry or browser geolocation
   - Auto-refresh capability
@@ -244,9 +257,57 @@ weather-app/
   `prefers-reduced-motion: reduce`
   - `components/ErrorBoundary.tsx` wraps the whole app (`main.tsx`) and each tab, so a render error shows a
     `role="alert"` fallback with Try again / Reload while the header, tabs and the other tab keep working; it logs
-    only the error name, never payloads
+    only the error name, never payloads (production builds strip `console`, so the fallback UI is the only signal
+    there)
   - Query failures render human-readable copy with Retry through the same fallback pattern
 - **API Integration**: Proxy configuration to backend (`/api` → `http://localhost:8080`)
+- **Performance budget and code splitting** (`frontend/vite.config.ts`, `frontend/scripts/check-bundle-size.mjs`)
+  - Vendor chunks are split by a `manualChunks` function: `react` (`react`/`react-dom`/`scheduler`), `tanstack`
+    (`@tanstack/*`) and `leaflet` (`leaflet`/`react-leaflet`), so app releases do not invalidate the runtime
+  - `WeatherMap` (+ the Leaflet JS and CSS) and `ComparisonTab` are `React.lazy` chunks behind `Suspense` with
+    skeleton fallbacks, so Leaflet is never part of the initial JS payload; `TrendsTab` is lazy as well
+  - `npm run analyze` builds with `rollup-plugin-visualizer` (`dist/stats.html`, emitted by every production
+    build) and then runs the budget gate; `npm run check:bundle` reuses an existing `dist/`. The gate reads
+    `dist/.vite/manifest.json`, walks the
+    entry's **static** import closure and fails when the initial JS exceeds **200 KB gzip**, when the Leaflet
+    chunk enters that closure, or when an application chunk still contains `console`/`debugger` (production
+    builds run esbuild with `drop: ['console', 'debugger']`)
+  - Reference build: initial JS ≈ 93 KB gzip (`react` 44 + `index` 26 + `tanstack` 22), lazy `leaflet` ≈ 44 KB
+    gzip + 6 KB CSS, `ComparisonTab` 3.3 KB, `TrendsTab` 2.8 KB, `WeatherMap` 1.6 KB
+- **Offline support** (`localStorage` + service worker)
+  - `utils/persistentWeatherCache.ts` keeps one indexed key, `weather-app:weather-cache:v1`
+    (`{ version, entries: { [coordinateKey]: { savedAt, lastUsedAt, payload } } }`), where `coordinateKey` is the
+    same 4-decimal `lat,lng` string the backend caches and stores history by
+  - Entries expire after `WEATHER_CACHE_TTL_MS` (5 min, matching the backend TTL), the store holds at most 20
+    coordinates and evicts the least recently used, and expired entries are purged on every read and write;
+    corrupt/legacy JSON and `getItem`/`setItem` errors (private mode, quota) disable the feature without throwing
+  - `api/weatherQuery.ts` seeds `initialData` from that cache with `initialDataUpdatedAt = savedAt`, so React
+    Query keeps revalidating instead of showing cached data as fresh, and its `queryFn`
+    (`getWeatherWithCacheFallback`) writes every success and falls back to a non-expired entry when the request
+    fails, marking the payload `fromLocalCache` so `WeatherDisplay`/`WeatherPopup` label it as saved data
+  - `vite-plugin-pwa` (`registerType: 'autoUpdate'`, production builds only — inert in dev and Vitest) precaches
+    the app shell (JS/CSS/HTML/SVG) and falls back to `index.html` for unknown in-app paths (except `/api/*`).
+    Runtime rules: `/api/weather*` → `NetworkFirst`, `networkTimeoutSeconds: 3`, 5-minute cache (aligned with the
+    backend TTL); `tile.openstreetmap.org` → `CacheFirst`, 60 days, max 200 entries
+  - The two layers are complementary: the service worker caches the HTTP response (reload while offline still
+    boots the SPA), the `localStorage` layer gives instant paint and a typed fallback where no worker exists
+    (first visit, unsupported browser, private mode). `hooks/useOnlineStatus.ts` + `components/OfflineBanner.tsx`
+    (a `role="status"` banner) surface the offline state
+- **Render performance**
+  - `React.memo` is applied only to components proven to re-render needlessly: `NotificationRow` (extracted from
+    `NotificationPanel`), `ComparisonCell` (the comparison table's `<td>` rows), `WeatherDisplay` (primitive
+    `latitude`/`longitude` props) and `TabNav`. Their callbacks come from `useCallback` and their derived values
+    from `useMemo`, so referential equality holds
+  - `utils/renderCount.ts` is a dev-only render probe (`import.meta.env.PROD` guard, dropped from production
+    bundles) that the `memoisation` tests read to assert "parent re-rendered, child did not"
+  - `hooks/useVirtualList.ts` wraps `@tanstack/react-virtual` for the alert list and the saved-combinations list.
+    Lists of `VIRTUALIZE_THRESHOLD` (20) items or fewer render in plain flow; longer ones render only the window
+    plus the focused row (pinned so keyboard focus survives scrolling) and keep `aria-posinset`/`aria-setsize`
+    correct. The comparison table is deliberately **not** virtualized (≤ 5 columns × ~7 rows)
+  - `components/ProgressiveImage.tsx` (placeholder → real image, `loading="lazy"`, `decoding="async"`, explicit
+    `width`/`height`, `IntersectionObserver` gating, text fallback on error, no transition under
+    `prefers-reduced-motion`) renders the weather condition icons mapped by `utils/weatherIcons.ts` to local SVGs
+    in `src/assets/weather/` — no third-party image host
 
 ### Gradle Configuration
 - **Version**: Gradle 9.3.0 wrapper
@@ -387,6 +448,15 @@ weather-app/
   (rotation at 0/90/180/270/285°, cardinal label, "Calm", normalised bearings), `SunTimes.test.tsx` (offset
   rendering, polar labels, day length), `TrendsTab.test.tsx` (both charts, mock badge, feels-like note, humidity
   min/max/avg, skeletons, error + Retry) and `trendsQuery.test.ts` (key, 15-minute `staleTime`, `enabled`, window)
+- **Performance/offline tests** (issue #9): `memoisation.test.tsx` (parent re-render leaves `ComparisonCell`,
+  `NotificationRow`, `WeatherDisplay` and `TabNav` untouched, asserted through the dev render probe),
+  `NotificationPanel.virtual.test.tsx` and the favorites case in `ComparisonTab.test.tsx` (windowed DOM,
+  `aria-posinset`/`aria-setsize`, scroll to the next window, focus pinned across a scroll), `useVirtualList.test.tsx`,
+  `ProgressiveImage.test.tsx` (placeholder, lazy/async, `IntersectionObserver` gating asserted with a stub, error →
+  text, width/height), `persistentWeatherCache.test.ts` (TTL, LRU, purge, corrupt/quota), `weatherQuery.test.ts`
+  (cache write, offline fallback, `initialData`/`initialDataUpdatedAt`), `useOnlineStatus.test.ts` and
+  `OfflineBanner.test.tsx`. jsdom has no layout, so the virtualized suites use `test/virtualViewport.ts` to give
+  the scroll container a client size
 - **Provider tests**: `WeatherAggregationServiceTest` covers both-healthy, fail-fast fallback, primary/secondary
   timeouts and both-fail using latches (no `Thread.sleep`); `OpenMeteoApiClientTest` covers °F mapping and WMO codes
 - **History tests**: `WeatherRecordRepositoryTest` (`@DataJpaTest`) verifies the derived finder, `WeatherHistoryServiceTest`

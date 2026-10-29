@@ -2,7 +2,11 @@ import { Coordinates } from '../api/weatherClient';
 import { useWeatherQuery } from '../api/weatherQuery';
 import { MAX_COMPARISON_LOCATIONS } from '../hooks/useComparisonLocations';
 import { formatHumidity } from '../utils/format';
+import { weatherIconFor, weatherIconLabel, weatherIconSource } from '../utils/weatherIcons';
+import { ProgressiveImage } from './ProgressiveImage';
 import { SkeletonBlock, SkeletonText } from './Skeleton';
+
+const POPUP_ICON_SIZE = 40;
 
 interface WeatherPopupProps {
   coordinates: Coordinates;
@@ -50,9 +54,23 @@ export const WeatherPopup: React.FC<WeatherPopupProps> = ({
     return null;
   }
 
+  const conditionIcon = weatherIconFor(data.description);
+
   return (
     <div className="weather-popup">
-      <div className="weather-popup__temperature">{data.temperature}°F</div>
+      <div className="weather-popup__heading">
+        <ProgressiveImage
+          className="weather-popup__icon"
+          src={weatherIconSource(conditionIcon)}
+          alt={weatherIconLabel(conditionIcon)}
+          width={POPUP_ICON_SIZE}
+          height={POPUP_ICON_SIZE}
+        />
+        <div className="weather-popup__temperature">{data.temperature}°F</div>
+      </div>
+      {data.fromLocalCache && (
+        <p className="weather-popup__cached">Showing saved weather from your last visit.</p>
+      )}
       <dl className="weather-popup__items">
         <div className="weather-popup__item">
           <dt>Feels like</dt>

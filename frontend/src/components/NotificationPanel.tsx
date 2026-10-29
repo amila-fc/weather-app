@@ -1,17 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
-import type { AlertType, WeatherAlert } from '../utils/alerts';
-import { formatRelativeTime } from '../utils/format';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useVirtualList } from '../hooks/useVirtualList';
+import type { WeatherAlert } from '../utils/alerts';
+import { NotificationRow } from './NotificationRow';
 import { NotificationSettings } from './NotificationSettings';
-
-const TYPE_LABELS: Record<AlertType, string> = {
-  frost: 'Frost',
-  'extreme-heat': 'Heat',
-  'extreme-cold': 'Cold',
-  'temperature-change': 'Change',
-};
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Alert rows are two lines plus padding; the estimate only seeds the virtualizer's first measurement. */
+const ALERT_ROW_ESTIMATE_PX = 96;
+
+const alertKey = (alert: WeatherAlert) => alert.id;
 
 interface NotificationPanelProps {
   alerts: WeatherAlert[];
@@ -26,6 +25,26 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
 }) => {
   const [showSettings, setShowSettings] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+
+  const { isVirtualized, containerRef, rows, totalSize, onFocusCapture, onBlurCapture } =
+    useVirtualList<WeatherAlert, HTMLUListElement>({
+      items: alerts,
+      estimateSize: ALERT_ROW_ESTIMATE_PX,
+      getKey: alertKey,
+    });
+
+  const alertsById = useMemo(() => new Map(alerts.map((alert) => [alert.id, alert])), [alerts]);
+
+  // Rows only know their id, so the memoised row keeps referential equality when the list changes.
+  const selectRow = useCallback(
+    (alertId: string) => {
+      const alert = alertsById.get(alertId);
+      if (alert) {
+        onSelectAlert(alert);
+      }
+    },
+    [alertsById, onSelectAlert],
+  );
 
   // Modal-ish popover: focus starts inside and Tab cycles within it (Escape is handled by the bell,
   // which restores focus to the trigger).
@@ -81,18 +100,26 @@ export const NotificationPanel: React.FC<NotificationPanelProps> = ({
       {alerts.length === 0 ? (
         <p className="notification-panel__empty">No alerts yet</p>
       ) : (
-        <ul className="notification-panel__list">
-          {alerts.map((alert) => (
-            <li key={alert.id} className="notification-panel__item">
-              <button type="button" className="notification-panel__alert" onClick={() => onSelectAlert(alert)}>
-                <span className={`notification-panel__type notification-panel__type--${alert.type}`}>
-                  {TYPE_LABELS[alert.type]}
-                </span>
-                <span className="notification-panel__title">{alert.title}</span>
-                <span className="notification-panel__time">{formatRelativeTime(alert.createdAt)}</span>
-                <span className="notification-panel__body">{alert.body}</span>
-              </button>
-            </li>
+        <ul
+          ref={containerRef}
+          className={`notification-panel__list${isVirtualized ? ' notification-panel__list--virtual' : ''}`}
+          style={isVirtualized ? { height: totalSize } : undefined}
+          onFocus={onFocusCapture}
+          onBlur={onBlurCapture}
+        >
+          {rows.map((row) => (
+            <NotificationRow
+              key={row.key}
+              alertId={row.item.id}
+              type={row.item.type}
+              title={row.item.title}
+              body={row.item.body}
+              createdAt={row.item.createdAt}
+              onSelect={selectRow}
+              index={row.index}
+              offset={isVirtualized ? row.start : undefined}
+              setSize={isVirtualized ? alerts.length : undefined}
+            />
           ))}
         </ul>
       )}

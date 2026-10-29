@@ -1,4 +1,5 @@
-import { useRef } from 'react';
+import { memo, useRef } from 'react';
+import { recordRender } from '../utils/renderCount';
 
 export type AppTab = 'current' | 'trends' | 'compare';
 
@@ -13,7 +14,8 @@ const TABS: Array<{ id: AppTab; label: string }> = [
   { id: 'compare', label: 'Compare' },
 ];
 
-export const TabNav: React.FC<TabNavProps> = ({ activeTab, onSelect }) => {
+export const TabNav: React.FC<TabNavProps> = memo(function TabNav({ activeTab, onSelect }) {
+  recordRender('tab-nav');
   const tabRefs = useRef<Partial<Record<AppTab, HTMLButtonElement | null>>>({});
 
   // WAI-ARIA tabs pattern: arrow keys move selection *and* focus, Home/End jump to the ends.
@@ -71,4 +73,4 @@ export const TabNav: React.FC<TabNavProps> = ({ activeTab, onSelect }) => {
       ))}
     </div>
   );
-};
+});

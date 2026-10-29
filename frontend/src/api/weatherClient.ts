@@ -12,6 +12,8 @@ export interface WeatherData {
   frost_warning?: boolean;
   frost_severity?: 'none' | 'light' | 'moderate' | 'severe';
   frost_advisory?: string;
+  /** Set by the client when the network failed and the payload came from the offline cache. */
+  fromLocalCache?: boolean;
 }
 
 export interface Coordinates {

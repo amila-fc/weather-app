@@ -1244,3 +1244,102 @@
     transition: none;
   }
 }
+
+/* Offline notice: sits under the header so it never covers the controls it explains. */
+.offline-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 1rem 0.75rem;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font-size: 0.9rem;
+}
+
+/* Progressive image: the placeholder reserves the box, the real image fades in on top of it. */
+.progressive-image {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 50%;
+}
+
+.progressive-image__placeholder {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  transition: opacity 240ms ease-out;
+}
+
+.progressive-image__placeholder--blur {
+  filter: blur(4px);
+  transform: scale(1.08);
+}
+
+.progressive-image__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity 240ms ease-out;
+}
+
+.progressive-image__img--loaded {
+  opacity: 1;
+}
+
+.progressive-image--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  border: 1px dashed var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.weather-display__icon {
+  display: block;
+  margin: 0 0 0.75rem;
+}
+
+.weather-display__cached,
+.weather-popup__cached {
+  margin: 0 0 0.75rem;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.weather-popup__heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Virtualized lists position their rows absolutely inside a fixed-height scroll area. */
+.notification-panel__list--virtual,
+.favorites-list--virtual {
+  position: relative;
+  display: block;
+}
+
+.favorites-list--virtual {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progressive-image__placeholder,
+  .progressive-image__img {
+    transition: none;
+  }
+}

@@ -1,11 +1,13 @@
-import { useQueries } from '@tanstack/react-query';
+import { memo, useCallback, useMemo } from 'react';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import type { WeatherData } from '../api/weatherClient';
-import { weatherQueryOptions } from '../api/weatherQuery';
+import { weatherQueryKey, weatherQueryOptions } from '../api/weatherQuery';
 import type { ComparisonLocation } from '../hooks/useComparisonLocations';
 import type { ComparisonHighlights } from '../utils/comparison';
 import { findHighlights } from '../utils/comparison';
 import { formatLocationLabel } from '../utils/coordinates';
 import { formatHumidity } from '../utils/format';
+import { recordRender } from '../utils/renderCount';
 import { getTemperatureBand } from '../utils/temperature';
 import { SkeletonBlock } from './Skeleton';
 
@@ -18,29 +20,29 @@ interface ColumnState {
   data?: WeatherData;
   isLoading: boolean;
   isError: boolean;
-  refetch: () => void;
 }
 
-type HighlightMetric = 'temperature' | 'humidity';
+const temperatureClasses = (highlights: ComparisonHighlights, id: string): string[] => {
+  const classes: string[] = [];
+  if (highlights.warmest.includes(id)) {
+    classes.push('comparison-cell--warmest');
+  }
+  if (highlights.coldest.includes(id)) {
+    classes.push('comparison-cell--coldest');
+  }
+  return classes;
+};
 
-const HIGHLIGHT_RULES = {
-  temperature: [
-    { key: 'warmest', className: 'comparison-cell--warmest', label: 'warmest' },
-    { key: 'coldest', className: 'comparison-cell--coldest', label: 'coldest' },
-  ],
-  humidity: [
-    { key: 'highestHumidity', className: 'comparison-cell--highest-humidity', label: 'highest humidity' },
-    { key: 'lowestHumidity', className: 'comparison-cell--lowest-humidity', label: 'lowest humidity' },
-  ],
-} as const;
-
-const highlightsFor = (metric: HighlightMetric, id: string, highlights: ComparisonHighlights) =>
-  HIGHLIGHT_RULES[metric]
-    .filter((rule) => highlights[rule.key].includes(id))
-    .reduce(
-      (acc, rule) => ({ classes: [...acc.classes, rule.className], labels: [...acc.labels, rule.label] }),
-      { classes: [] as string[], labels: [] as string[] },
-    );
+const humidityClasses = (highlights: ComparisonHighlights, id: string): string[] => {
+  const classes: string[] = [];
+  if (highlights.highestHumidity.includes(id)) {
+    classes.push('comparison-cell--highest-humidity');
+  }
+  if (highlights.lowestHumidity.includes(id)) {
+    classes.push('comparison-cell--lowest-humidity');
+  }
+  return classes;
+};
 
 const Skeleton: React.FC = () => (
   <span className="comparison-skeleton">
@@ -51,51 +53,116 @@ const Skeleton: React.FC = () => (
 
 const MissingValue: React.FC = () => <span className="comparison-missing">—</span>;
 
+interface ComparisonCellProps {
+  latitude: number;
+  longitude: number;
+  /** Pre-formatted text, so the cell only ever compares primitives. */
+  value: string | null;
+  isLoading: boolean;
+  isError: boolean;
+  className?: string;
+  isWarmest?: boolean;
+  isColdest?: boolean;
+  isHighestHumidity?: boolean;
+  isLowestHumidity?: boolean;
+  /** Only the temperature row offers the inline retry, matching the previous single affordance. */
+  showRetry?: boolean;
+}
+
+/**
+ * Memoised per cell: the table re-renders whenever any column's request settles or the tab's message
+ * changes, while a single cell's props stay identical.
+ */
+const ComparisonCell: React.FC<ComparisonCellProps> = memo(function ComparisonCell({
+  latitude,
+  longitude,
+  value,
+  isLoading,
+  isError,
+  className,
+  isWarmest = false,
+  isColdest = false,
+  isHighestHumidity = false,
+  isLowestHumidity = false,
+  showRetry = false,
+}) {
+  const queryClient = useQueryClient();
+  recordRender('comparison-cell');
+
+  // Retrying through the query client keeps this callback stable, so the memo never breaks on it.
+  const retry = useCallback(() => {
+    void queryClient.refetchQueries({ queryKey: weatherQueryKey({ lat: latitude, lng: longitude }) });
+  }, [queryClient, latitude, longitude]);
+
+  const labels = [
+    isWarmest ? 'warmest' : null,
+    isColdest ? 'coldest' : null,
+    isHighestHumidity ? 'highest humidity' : null,
+    isLowestHumidity ? 'lowest humidity' : null,
+  ].filter((label): label is string => label !== null);
+
+  return (
+    <td className={className}>
+      {isLoading ? (
+        <Skeleton />
+      ) : isError ? (
+        showRetry ? (
+          <span className="comparison-error">
+            <span>Couldn&apos;t load</span>
+            <button type="button" onClick={retry}>
+              Retry
+            </button>
+          </span>
+        ) : (
+          <MissingValue />
+        )
+      ) : value === null ? (
+        <MissingValue />
+      ) : (
+        <>
+          <span>{value}</span>
+          {labels.map((label) => (
+            <span key={label} className="sr-only">
+              {label}
+            </span>
+          ))}
+        </>
+      )}
+    </td>
+  );
+});
+
 export const ComparisonTable: React.FC<ComparisonTableProps> = ({ locations }) => {
   const results = useQueries({ queries: locations.map((location) => weatherQueryOptions(location)) });
 
-  const columns: ColumnState[] = locations.map((location, index) => ({
-    location,
-    data: results[index].data,
-    isLoading: results[index].isLoading,
-    isError: results[index].isError,
-    refetch: () => {
-      void results[index].refetch();
-    },
-  }));
+  const columns = useMemo<ColumnState[]>(
+    () =>
+      locations.map((location, index) => ({
+        location,
+        data: results[index].data,
+        isLoading: results[index].isLoading,
+        isError: results[index].isError,
+      })),
+    [locations, results],
+  );
 
-  const highlights = findHighlights(
-    columns.map((column) => ({
-      id: column.location.id,
-      temperature: column.data?.temperature,
-      humidity: column.data?.humidity,
-    })),
+  const highlights = useMemo(
+    () =>
+      findHighlights(
+        columns.map((column) => ({
+          id: column.location.id,
+          temperature: column.data?.temperature,
+          humidity: column.data?.humidity,
+        })),
+      ),
+    [columns],
   );
 
   const showSourceRow = columns.some((column) => column.data?.source);
   const showFrostRow = columns.some((column) => column.data?.frost_advisory);
 
-  const renderCell = (column: ColumnState, content: React.ReactNode, className?: string) => (
-    <td key={column.location.id} className={className}>
-      {column.isLoading ? <Skeleton /> : column.isError ? <MissingValue /> : content}
-    </td>
-  );
-
-  const renderHighlighted = (column: ColumnState, metric: HighlightMetric, content: React.ReactNode) => {
-    const { classes, labels } = highlightsFor(metric, column.location.id, highlights);
-    return renderCell(
-      column,
-      <>
-        {content}
-        {labels.map((label) => (
-          <span key={label} className="sr-only">
-            {label}
-          </span>
-        ))}
-      </>,
-      classes.join(' ') || undefined,
-    );
-  };
+  // Deliberately not virtualized: at most 5 columns x ~7 rows, so a scroll window would add markup,
+  // break the sticky metric column and gain nothing measurable.
 
   return (
     <div className="comparison-table-wrapper" aria-busy={columns.some((column) => column.isLoading)}>
@@ -116,89 +183,98 @@ export const ComparisonTable: React.FC<ComparisonTableProps> = ({ locations }) =
         <tbody>
           <tr>
             <th scope="row">Temperature</th>
-            {columns.map((column) => {
-              const band = column.data ? getTemperatureBand(column.data.temperature) : null;
-              const { classes, labels } = highlightsFor('temperature', column.location.id, highlights);
-              const className = [
-                ...classes,
-                band ? `comparison-cell--${band.band}` : '',
-              ]
-                .filter(Boolean)
-                .join(' ');
-
-              return (
-                <td key={column.location.id} className={className || undefined}>
-                  {column.isLoading ? (
-                    <Skeleton />
-                  ) : column.isError ? (
-                    <span className="comparison-error">
-                      <span>Couldn't load</span>
-                      <button type="button" onClick={column.refetch}>
-                        Retry
-                      </button>
-                    </span>
-                  ) : column.data ? (
-                    <>
-                      <span>{column.data.temperature}°F</span>
-                      {labels.map((label) => (
-                        <span key={label} className="sr-only">
-                          {label}
-                        </span>
-                      ))}
-                    </>
-                  ) : (
-                    <MissingValue />
-                  )}
-                </td>
-              );
-            })}
+            {columns.map((column) => (
+              <ComparisonCell
+                key={column.location.id}
+                latitude={column.location.lat}
+                longitude={column.location.lng}
+                value={column.data ? `${column.data.temperature}°F` : null}
+                isLoading={column.isLoading}
+                isError={column.isError}
+                className={
+                  [
+                    ...temperatureClasses(highlights, column.location.id),
+                    column.data ? `comparison-cell--${getTemperatureBand(column.data.temperature).band}` : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ') || undefined
+                }
+                isWarmest={highlights.warmest.includes(column.location.id)}
+                isColdest={highlights.coldest.includes(column.location.id)}
+                showRetry
+              />
+            ))}
           </tr>
           <tr>
             <th scope="row">Feels like</th>
-            {columns.map((column) =>
-              renderCell(
-                column,
-                column.data ? <span>{column.data.apparentTemperature}°F</span> : <MissingValue />,
-              ),
-            )}
+            {columns.map((column) => (
+              <ComparisonCell
+                key={column.location.id}
+                latitude={column.location.lat}
+                longitude={column.location.lng}
+                value={column.data ? `${column.data.apparentTemperature}°F` : null}
+                isLoading={column.isLoading}
+                isError={column.isError}
+              />
+            ))}
           </tr>
           <tr>
             <th scope="row">Humidity</th>
-            {columns.map((column) =>
-              renderHighlighted(
-                column,
-                'humidity',
-                column.data ? <span>{formatHumidity(column.data.humidity)}</span> : <MissingValue />,
-              ),
-            )}
+            {columns.map((column) => (
+              <ComparisonCell
+                key={column.location.id}
+                latitude={column.location.lat}
+                longitude={column.location.lng}
+                value={column.data ? formatHumidity(column.data.humidity) : null}
+                isLoading={column.isLoading}
+                isError={column.isError}
+                className={humidityClasses(highlights, column.location.id).join(' ') || undefined}
+                isHighestHumidity={highlights.highestHumidity.includes(column.location.id)}
+                isLowestHumidity={highlights.lowestHumidity.includes(column.location.id)}
+              />
+            ))}
           </tr>
           <tr>
             <th scope="row">Conditions</th>
-            {columns.map((column) =>
-              renderCell(column, column.data ? <span>{column.data.description}</span> : <MissingValue />),
-            )}
+            {columns.map((column) => (
+              <ComparisonCell
+                key={column.location.id}
+                latitude={column.location.lat}
+                longitude={column.location.lng}
+                value={column.data?.description ?? null}
+                isLoading={column.isLoading}
+                isError={column.isError}
+              />
+            ))}
           </tr>
           {showSourceRow && (
             <tr>
               <th scope="row">Source</th>
-              {columns.map((column) =>
-                renderCell(column, column.data?.source ? <span>{column.data.source}</span> : <MissingValue />),
-              )}
+              {columns.map((column) => (
+                <ComparisonCell
+                  key={column.location.id}
+                  latitude={column.location.lat}
+                  longitude={column.location.lng}
+                  value={column.data?.source ?? null}
+                  isLoading={column.isLoading}
+                  isError={column.isError}
+                />
+              ))}
             </tr>
           )}
           {showFrostRow && (
             <tr>
               <th scope="row">Frost advisory</th>
-              {columns.map((column) =>
-                renderCell(
-                  column,
-                  column.data?.frost_advisory ? (
-                    <span>{column.data.frost_advisory}</span>
-                  ) : (
-                    <MissingValue />
-                  ),
-                ),
-              )}
+              {columns.map((column) => (
+                <ComparisonCell
+                  key={column.location.id}
+                  latitude={column.location.lat}
+                  longitude={column.location.lng}
+                  value={column.data?.frost_advisory ?? null}
+                  isLoading={column.isLoading}
+                  isError={column.isError}
+                />
+              ))}
             </tr>
           )}
         </tbody>
