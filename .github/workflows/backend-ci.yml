@@ -1,0 +1,74 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# contents: write is only used to publish the coverage badge to the `badges` branch on main.
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Tests and coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Validate the Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # The frontend job owns the Vite build; processResources would run it here, so it is skipped.
+      - name: Run the backend tests with coverage
+        run: ./gradlew :backend:test -x :frontend:npmBuild --console=plain
+
+      - name: Write the coverage summary
+        if: always()
+        run: |
+          node .github/scripts/coverage-badge.mjs \
+            --source jacoco \
+            --input backend/build/reports/jacoco/test/jacocoTestReport.csv \
+            --name backend \
+            --label "backend coverage" \
+            --output-dir coverage-badges \
+            --summary-file "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the test and coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-reports
+          path: |
+            backend/build/reports/tests/test
+            backend/build/reports/jacoco/test
+          if-no-files-found: warn
+
+      - name: Publish the coverage badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash .github/scripts/publish_badges.sh coverage-badges

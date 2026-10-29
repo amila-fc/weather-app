@@ -1,0 +1,9 @@
+# Keep shell scripts LF even on Windows checkouts: bash rejects CRLF in CI.
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf eof=lf
+*.mjs text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf

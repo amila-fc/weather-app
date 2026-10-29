@@ -1,0 +1,91 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: frontend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# contents: write is only used to publish the coverage badge to the `badges` branch on main.
+permissions:
+  contents: write
+
+defaults:
+  run:
+    working-directory: frontend
+
+jobs:
+  test:
+    name: Lint, tests, coverage and build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install the dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # Older checkouts may predate the V8 coverage provider; install it on the fly rather than failing.
+      - name: Ensure the coverage provider is available
+        run: |
+          if node -e "require.resolve('@vitest/coverage-v8')" >/dev/null 2>&1; then
+            echo "Coverage provider already installed"
+          else
+            npm install --no-save "@vitest/coverage-v8@^2.1.9"
+          fi
+
+      - name: Run the tests with coverage
+        run: |
+          npx vitest run --coverage \
+            --coverage.provider=v8 \
+            --coverage.reporter=text \
+            --coverage.reporter=json-summary \
+            --coverage.reportsDirectory=coverage
+
+      - name: Build the production bundle
+        run: npm run build
+
+      - name: Write the coverage summary
+        if: always()
+        working-directory: .
+        run: |
+          node .github/scripts/coverage-badge.mjs \
+            --source vitest \
+            --input frontend/coverage/coverage-summary.json \
+            --name frontend \
+            --label "frontend coverage" \
+            --output-dir coverage-badges \
+            --summary-file "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the coverage and build reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-reports
+          path: |
+            frontend/coverage
+            frontend/dist/stats.html
+          if-no-files-found: warn
+
+      - name: Publish the coverage badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        working-directory: .
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash .github/scripts/publish_badges.sh coverage-badges

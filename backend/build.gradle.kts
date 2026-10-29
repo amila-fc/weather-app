@@ -1,5 +1,6 @@
 plugins {
     java
+    jacoco
     id("org.springframework.boot") version "3.3.6"
     id("io.spring.dependency-management") version "1.1.7"
 }
@@ -30,6 +31,24 @@ dependencies {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+jacoco {
+    toolVersion = "0.8.12"
+}
+
+// Coverage reports feed the README badge and the CI job summary.
+tasks.jacocoTestReport {
+    dependsOn(tasks.test)
+    reports {
+        xml.required = true
+        csv.required = true
+        html.required = true
+    }
+}
+
+tasks.test {
+    finalizedBy(tasks.jacocoTestReport)
 }
 
 // Ensure frontend build output is included in the JAR
