@@ -1,6 +1,8 @@
 package com.sample.weatherservice.client.nws;
 
-public class NwsApiException extends RuntimeException {
+import com.sample.weatherservice.client.WeatherProviderException;
+
+public class NwsApiException extends WeatherProviderException {
 
     public NwsApiException(String message) {
         super(message);

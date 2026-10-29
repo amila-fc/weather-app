@@ -50,16 +50,48 @@ weather-app/
 │   ├── build.gradle.kts    # Backend build configuration
 │   └── src/
 │       ├── main/java/com/sample/weatherservice/
-│       │   ├── WeatherServiceApplication.java
+│       │   ├── WeatherServiceApplication.java  # @EnableCaching
 │       │   ├── controller/
 │       │   │   ├── WeatherController.java      # REST endpoints
 │       │   │   └── GlobalExceptionHandler.java # Error handling
-│       │   ├── client/nws/
-│       │   │   ├── NwsApiClient.java          # Weather API client
-│       │   │   ├── NwsProperties.java         # Configuration
-│       │   │   └── NwsApiException.java       # Custom exception
+│       │   ├── service/
+│       │   │   ├── WeatherService.java         # Sets the cached flag, records history
+│       │   │   ├── WeatherConditionLoader.java # @Cacheable aggregated fetch
+│       │   │   ├── WeatherAggregationService.java # Concurrent providers, fallback, averaging
+│       │   │   ├── WeatherHistoryService.java  # History write/read path
+│       │   │   ├── TemperatureTrendAnalyzer.java # Least-squares trend classification
+│       │   │   └── FrostWarningService.java    # Frost severity + advisory lookup
+│       │   ├── entity/
+│       │   │   └── WeatherRecord.java          # weather_history table
+│       │   ├── repository/
+│       │   │   └── WeatherRecordRepository.java # Spring Data JPA finder
+│       │   ├── config/
+│       │   │   ├── CacheConfig.java            # Caffeine cache manager
+│       │   │   ├── WeatherCacheProperties.java # weather.cache.* binding
+│       │   │   ├── WeatherProviderProperties.java # weather.primary/secondary/averaging binding
+│       │   │   ├── WeatherHistoryProperties.java # weather.history.* binding
+│       │   │   ├── CorsConfig.java
+│       │   │   └── HttpClientConfig.java       # Per-provider HTTP clients + provider executor
+│       │   ├── client/
+│       │   │   ├── WeatherProvider.java        # fetch/source contract
+│       │   │   ├── WeatherProviderException.java
+│       │   │   ├── AllProvidersFailedException.java
+│       │   │   ├── nws/
+│       │   │   │   ├── NwsApiClient.java       # Weather API client
+│       │   │   │   ├── NwsProperties.java      # Configuration
+│       │   │   │   └── NwsApiException.java    # Custom exception
+│       │   │   └── openmeteo/
+│       │   │       └── OpenMeteoApiClient.java # Fallback provider + WMO code mapping
 │       │   └── api/
-│       │       └── Condition.java             # Weather data model
+│       │       ├── Condition.java             # Weather data model
+│       │       ├── FrostSeverity.java         # none | light | moderate | severe
+│       │       ├── FrostAssessment.java       # Frost fields derived from temperature
+│       │       ├── WeatherSource.java         # nws | open-meteo | averaged
+│       │       ├── TrendDirection.java        # up | down | stable
+│       │       └── WeatherHistoryResponse.java # History window + trend
+│       ├── main/resources/
+│       │   ├── application.properties
+│       │   └── messages.properties            # frost.advisory.* texts
 │       └── test/
 ├── frontend/                # React application
 │   ├── build.gradle.kts    # Frontend build configuration
@@ -79,15 +111,38 @@ weather-app/
 
 ### Backend (Spring Boot 3.3.6)
 - **Framework**: Spring Boot 3.3.6 with Spring Web
-- **Java Version**: 21 (configured in build.gradle.kts)
+- **Java Version**: 21, enforced by a Gradle Java toolchain in `backend/build.gradle.kts`
 - **API Endpoints**:
   - `GET /api/status` - Server health check
   - `GET /api/weather?lat={latitude}&long={longitude}` - Get weather data
+  - `GET /api/weather/history?lat={latitude}&long={longitude}&days={days}` - Recorded history + trend (`days` 1..30, default 7)
 - **Weather API**: National Weather Service (api.weather.gov)
   - No API key required
   - Two-step process: coordinates → grid → weather data
   - Returns temperature (°F), humidity (%), description, apparent temperature, and forecast summary
-- **Exception Handling**: Global exception handler for API errors (returns 503 for NWS failures)
+- **Caching**: Caffeine-backed `weather` cache through the Spring Cache abstraction
+  - `WeatherController` → `WeatherService` (sets the `cached` flag) → `WeatherConditionLoader` (`@Cacheable`) → `NwsApiClient`
+  - Keyed by coordinates normalized to 4 decimals (`47.0000,8.0000`), matching the NWS `/points/%.4f,%.4f` lookup
+  - TTL `weather.cache.ttl` (default `5m`) and bound `weather.cache.max-size` (default `1000`); non-positive values fail startup
+  - Only successful responses are cached, and the cached value never carries `cached=true`
+- **Frost assessment**: derived from `temperature`, never fetched
+  - `FrostWarningService` buckets the temperature (inclusive lower bound): `none` (≥32°F), `light` (25–31.9°F), `moderate` (15–24.9°F), `severe` (<15°F)
+  - `frost_warning` is `true` for every bucket except `none`
+  - Advisory texts live only in `messages.properties` (`frost.advisory.<severity>`) and are resolved through `MessageSource`; a missing key throws `NoSuchMessageException`
+- **Multi-provider integration**: NWS is primary, Open-Meteo is the fallback
+  - `WeatherProvider` (`fetch`/`source`) is implemented by `NwsApiClient` and `OpenMeteoApiClient`; every provider failure is a `WeatherProviderException` (`NwsApiException` is a subtype)
+  - `WeatherAggregationService` calls both providers concurrently on virtual threads: both answer → numeric fields averaged with NWS wording, `source=averaged`; one answers → that payload; none → `AllProvidersFailedException` → 503
+  - A provider that fails is never waited on; a silent provider is abandoned at its own `weather.primary.timeout` / `weather.secondary.timeout` (default `2s`), which the HTTP clients also enforce
+  - `weather.averaging.enabled=false` always prefers the NWS payload (`source=nws`); Open-Meteo base URL, user agent and both timeouts come from `application.properties`
+- **History**: every successful `/api/weather` query writes one `weather_history` row (H2, in-memory)
+  - `WeatherService` records after the `cached` flag is applied, so cache hits are recorded too and the column is truthful; a 503 writes nothing
+  - Coordinates are stored at 4 decimals with the cache-key convention; the only access path is the `(latitude, longitude, recorded_at)` index
+  - `GET /api/weather/history?lat=&long=&days=` returns ascending records for the window (default `7`, max `30`), plus a least-squares trend (`up`/`down`/`stable`) and `temperatureChange` in °F/day (threshold `weather.history.trend-threshold`)
+  - Invalid `days` or missing coordinates → 400; H2 is ephemeral, so history is lost on restart
+- **Exception Handling**: `GlobalExceptionHandler` is the only place mapping exceptions to status codes
+  - `WeatherProviderException` → 503, invalid request parameters / bad `days` → 400
+  - Unknown paths (`NoResourceFoundException`) → 404 and unsupported methods → 405, instead of falling through
+    to the catch-all 500 handler; the catch-all stays for genuinely unexpected errors
 
 ### Frontend (React + TypeScript + Vite)
 - **Framework**: React 18.3 with TypeScript 5.5
@@ -104,6 +159,7 @@ weather-app/
 - **Version**: Gradle 9.3.0 wrapper
 - **Node Plugin**: com.github.node-gradle.node v7.1.0
 - **Node/NPM**: Automatically downloads Node 20.11.0 and NPM 10.2.4
+- **Java Toolchain**: Gradle auto-provisions a JDK 21 (via the foojay resolver in `settings.gradle.kts`) and runs compilation and tests on it, so the host JDK version does not affect the build. The JDK is downloaded once on the first build (~1 min) and cached under `~/.gradle/jdks`.
 - **Build Integration**: Frontend build outputs to `frontend/dist/`, copied to backend's static resources
 
 ## Development Workflow
@@ -131,6 +187,13 @@ weather-app/
   3. Fetch latest observations from nearest station
   4. Get forecast data for additional information
 
+### Open-Meteo API (fallback / averaging partner)
+- **Base URL**: `weather.secondary.base-url` (default https://api.open-meteo.com/v1/forecast)
+- **Authentication**: none; `weather.secondary.user-agent` is sent as the User-Agent
+- **Request**: `?latitude={lat}&longitude={long}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code&temperature_unit=fahrenheit&timezone=UTC`
+- `temperature_unit=fahrenheit` keeps the °F contract; WMO `weather_code` is mapped to `description`
+- Global coverage, so it also serves locations the NWS cannot
+
 ### Response Format
 ```json
 {
@@ -138,7 +201,35 @@ weather-app/
   "humidity": 67.995,              // Percentage
   "description": "Clear",          // Current conditions
   "apparentTemperature": 55.796,   // Feels like (°F)
-  "summary": "Clear skies..."      // Detailed forecast
+  "summary": "Clear skies...",     // Detailed forecast
+  "cached": false,                 // true when served from the weather cache
+  "source": "averaged",            // nws | open-meteo | averaged
+  "frost_warning": false,          // true when frost is expected (severity != none)
+  "frost_severity": "none",        // none | light | moderate | severe
+  "frost_advisory": "No frost..."  // from messages.properties: frost.advisory.<severity>
+}
+```
+
+### History Response Format (`GET /api/weather/history`)
+```json
+{
+  "latitude": 47.0000,             // normalized to 4 decimals
+  "longitude": 8.0000,
+  "days": 3,                       // requested window
+  "records": [                     // ascending by recordedAt
+    {
+      "recordedAt": "2026-10-29T10:00:00Z",  // UTC
+      "temperature": 55.796,
+      "humidity": 67.995,
+      "apparentTemperature": 55.796,
+      "description": "Clear",
+      "summary": "Clear skies...",
+      "source": "nws",             // nws | open-meteo | averaged
+      "cached": false              // was this query served from cache
+    }
+  ],
+  "trend": "up",                   // up | down | stable (least-squares slope)
+  "temperatureChange": 1.25        // °F per day
 }
 ```
 
@@ -146,12 +237,21 @@ weather-app/
 
 - **Backend Tests**: JUnit 5 with Spring Boot Test
 - **Mocking**: Mockito for external API calls
-- **Test Coverage**: Controller endpoints with success and error cases
+- **Test Coverage**: Controller endpoints with success and error cases, cache hit/miss/expiry/keying
+  (`WeatherServiceTest` uses an injected Caffeine `Ticker` as a fake clock, so no `Thread.sleep`)
+- **Cache config tests**: `CacheConfigTest` covers property binding, bounds, stats and startup validation
+- **Frost tests**: `FrostWarningServiceTest` covers every bucket and the `32.0`/`25.0`/`15.0` boundaries,
+  `FrostSeverityTest` asserts wire values and message-bundle presence, `WeatherControllerTest` asserts the JSON contract
+- **Provider tests**: `WeatherAggregationServiceTest` covers both-healthy, fail-fast fallback, primary/secondary
+  timeouts and both-fail using latches (no `Thread.sleep`); `OpenMeteoApiClientTest` covers °F mapping and WMO codes
+- **History tests**: `WeatherRecordRepositoryTest` (`@DataJpaTest`) verifies the derived finder, `WeatherHistoryServiceTest`
+  covers persistence, windowing and trend wiring, `TemperatureTrendAnalyzerTest` covers up/down/stable/no-data,
+  `WeatherServiceTest` asserts one row per successful query (including cache hits) and none on failure
 
 ## Important Notes
 
 - The application previously used Dark Sky API (deprecated)
 - Successfully migrated to National Weather Service API
-- Frontend includes frost warning feature (displays alert when temp < 32°F)
+- Frontend includes frost warning feature (displays alert when temp < 32°F); the backend now also exposes authoritative `frost_warning` / `frost_severity` / `frost_advisory` fields
 - CORS enabled for development profile
 - All weather data is for US locations only (NWS limitation)

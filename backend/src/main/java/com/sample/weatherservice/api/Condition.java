@@ -34,6 +34,36 @@ public class Condition {
     @JsonProperty
     private String summary;
 
+    /**
+     * Whether the response was served from the weather cache
+     */
+    @JsonProperty
+    private boolean cached;
+
+    /**
+     * Whether frost is expected for the current temperature
+     */
+    @JsonProperty("frost_warning")
+    private boolean frostWarning;
+
+    /**
+     * Frost severity bucket: none, light, moderate or severe
+     */
+    @JsonProperty("frost_severity")
+    private FrostSeverity frostSeverity;
+
+    /**
+     * Frost safety advice for the computed severity
+     */
+    @JsonProperty("frost_advisory")
+    private String frostAdvisory;
+
+    /**
+     * Which provider (or blend of providers) produced this payload
+     */
+    @JsonProperty
+    private WeatherSource source;
+
     // Legacy constructor for backward compatibility
     public Condition(Double temperature) {
         this.temperature = temperature;
@@ -42,11 +72,32 @@ public class Condition {
     // Full constructor with all fields
     public Condition(Double temperature, Double humidity, String description,
                     Double apparentTemperature, String summary) {
+        this(temperature, humidity, description, apparentTemperature, summary, false);
+    }
+
+    // Full constructor including the cache indicator
+    public Condition(Double temperature, Double humidity, String description,
+                    Double apparentTemperature, String summary, boolean cached) {
         this.temperature = temperature;
         this.humidity = humidity;
         this.description = description;
         this.apparentTemperature = apparentTemperature;
         this.summary = summary;
+        this.cached = cached;
+    }
+
+    // Copy constructor: every withX method goes through it so no field is ever dropped.
+    private Condition(Condition other) {
+        this.temperature = other.temperature;
+        this.humidity = other.humidity;
+        this.description = other.description;
+        this.apparentTemperature = other.apparentTemperature;
+        this.summary = other.summary;
+        this.cached = other.cached;
+        this.frostWarning = other.frostWarning;
+        this.frostSeverity = other.frostSeverity;
+        this.frostAdvisory = other.frostAdvisory;
+        this.source = other.source;
     }
 
     public Double getTemperature() {
@@ -67,5 +118,69 @@ public class Condition {
 
     public String getSummary() {
         return summary;
+    }
+
+    public boolean isCached() {
+        return cached;
+    }
+
+    public Condition withCached(boolean cached) {
+        Condition copy = new Condition(this);
+        copy.cached = cached;
+        return copy;
+    }
+
+    public boolean isFrostWarning() {
+        return frostWarning;
+    }
+
+    public FrostSeverity getFrostSeverity() {
+        return frostSeverity;
+    }
+
+    public String getFrostAdvisory() {
+        return frostAdvisory;
+    }
+
+    public Condition withFrost(FrostAssessment assessment) {
+        Condition copy = new Condition(this);
+        copy.frostWarning = assessment.frostWarning();
+        copy.frostSeverity = assessment.frostSeverity();
+        copy.frostAdvisory = assessment.frostAdvisory();
+        return copy;
+    }
+
+    public WeatherSource getSource() {
+        return source;
+    }
+
+    public Condition withSource(WeatherSource source) {
+        Condition copy = new Condition(this);
+        copy.source = source;
+        return copy;
+    }
+
+    /**
+     * Blends two provider payloads: numeric fields are averaged, while text fields (description, summary)
+     * are taken from the primary provider because provider wording is not comparable.
+     */
+    public static Condition averaged(Condition primary, Condition secondary) {
+        return new Condition(
+                mean(primary.temperature, secondary.temperature),
+                mean(primary.humidity, secondary.humidity),
+                primary.description,
+                mean(primary.apparentTemperature, secondary.apparentTemperature),
+                primary.summary)
+                .withSource(WeatherSource.AVERAGED);
+    }
+
+    private static Double mean(Double first, Double second) {
+        if (first == null) {
+            return second;
+        }
+        if (second == null) {
+            return first;
+        }
+        return (first + second) / 2;
     }
 }

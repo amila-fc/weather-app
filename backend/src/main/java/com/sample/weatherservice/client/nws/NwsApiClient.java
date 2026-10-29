@@ -3,6 +3,8 @@ package com.sample.weatherservice.client.nws;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sample.weatherservice.api.Condition;
+import com.sample.weatherservice.api.WeatherSource;
+import com.sample.weatherservice.client.WeatherProvider;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
@@ -10,12 +12,13 @@ import org.apache.http.client.ResponseHandler;
 import org.apache.http.client.methods.HttpGet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 
 @Service
-public class NwsApiClient {
+public class NwsApiClient implements WeatherProvider {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NwsApiClient.class);
 
@@ -23,10 +26,21 @@ public class NwsApiClient {
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
 
-    public NwsApiClient(NwsProperties properties, HttpClient httpClient, ObjectMapper objectMapper) {
+    public NwsApiClient(NwsProperties properties, @Qualifier("nwsHttpClient") HttpClient httpClient,
+                        ObjectMapper objectMapper) {
         this.properties = properties;
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
+    }
+
+    @Override
+    public Condition fetch(final double latitude, final double longitude) {
+        return getCondition(latitude, longitude).withSource(WeatherSource.NWS);
+    }
+
+    @Override
+    public WeatherSource source() {
+        return WeatherSource.NWS;
     }
 
     private final ResponseHandler<JsonNode> jsonNodeResponseHandler = new ResponseHandler<>() {
@@ -103,7 +117,7 @@ public class NwsApiClient {
         Double tempC = observation.at("/properties/temperature/value").asDouble();
 
         // Convert to Fahrenheit to match frontend expectations
-        Double tempF = (tempC * 9/5) + 32;
+        Double tempF = toFahrenheit(tempC);
 
         // Extract humidity (as percentage)
         Double humidity = observation.at("/properties/relativeHumidity/value").asDouble();
@@ -115,10 +129,10 @@ public class NwsApiClient {
         Double apparentTemp = tempF; // Default to actual temperature
         if (observation.at("/properties/heatIndex/value").isNumber()) {
             Double heatIndexC = observation.at("/properties/heatIndex/value").asDouble();
-            apparentTemp = (heatIndexC * 9/5) + 32;
+            apparentTemp = toFahrenheit(heatIndexC);
         } else if (observation.at("/properties/windChill/value").isNumber()) {
             Double windChillC = observation.at("/properties/windChill/value").asDouble();
-            apparentTemp = (windChillC * 9/5) + 32;
+            apparentTemp = toFahrenheit(windChillC);
         }
 
         // Get summary from forecast (first period)
@@ -128,5 +142,9 @@ public class NwsApiClient {
         }
 
         return new Condition(tempF, humidity, description, apparentTemp, summary);
+    }
+
+    static double toFahrenheit(double celsius) {
+        return celsius * 9.0 / 5.0 + 32.0;
     }
 }
