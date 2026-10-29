@@ -21,20 +21,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Test Commands
 ```bash
-# Run all tests
+# Run all backend tests
 ./gradlew test
 
-# Run single test
+# Run single backend test
 ./gradlew test --tests "com.sample.weatherservice.controller.WeatherControllerTest.getWeather_returnSuccessfully"
+
+# Frontend tests, type-checked build and lint (run from frontend/)
+npm test          # vitest run (jsdom + Testing Library)
+npm run build     # tsc && vite build
+npm run lint      # eslint
 ```
 
 ### Run Application
 ```bash
 # Run Spring Boot backend (includes frontend static files)
-java -jar build/libs/backend-0.0.1-SNAPSHOT.jar
+java -jar backend/build/libs/backend-0.0.1-SNAPSHOT.jar
 
 # Run with custom port
-java -jar build/libs/backend-0.0.1-SNAPSHOT.jar --server.port=8081
+java -jar backend/build/libs/backend-0.0.1-SNAPSHOT.jar --server.port=8081
 
 # Run frontend development server (for development only)
 ./gradlew :frontend:npmDev
@@ -100,9 +105,16 @@ weather-app/
 │   └── src/
 │       ├── App.tsx         # Main application component
 │       ├── api/
-│       │   └── weatherClient.ts  # API client
+│       │   ├── weatherClient.ts  # API client
+│       │   └── weatherQuery.ts   # Shared ['weather', lat, lng] query
+│       ├── utils/
+│       │   └── temperature.ts    # Temperature bands + 4-dp coordinate rounding
+│       ├── test/
+│       │   └── setup.ts          # Testing Library matchers for Vitest
 │       └── components/
-│           └── WeatherDisplay.tsx # Weather display component
+│           ├── WeatherDisplay.tsx # Weather display component
+│           ├── WeatherMap.tsx     # Leaflet map, click-to-fetch, coloured markers
+│           └── WeatherPopup.tsx   # Map popup with loading/error states
 ├── build.gradle.kts        # Root build configuration
 └── settings.gradle.kts     # Multi-module settings
 ```
@@ -148,8 +160,12 @@ weather-app/
 - **Framework**: React 18.3 with TypeScript 5.5
 - **Build Tool**: Vite 5.3
 - **State Management**: TanStack Query v5 for server state
+- **Map**: Leaflet 1.9 + react-leaflet 4 (pinned to v4 for React 18) with OpenStreetMap tiles — no API token
+  - Chosen over Mapbox because Mapbox would need a secret token in the frontend bundle
+  - One shared query key `['weather', lat, lng]` feeds the map popup, the marker colour and the display
 - **Features**:
   - Real-time weather display
+  - Interactive map: click anywhere to load that location, popup with the conditions, temperature-coloured markers
   - Frost warning alerts (temperature < 32°F)
   - Manual coordinate entry or browser geolocation
   - Auto-refresh capability
@@ -242,6 +258,9 @@ weather-app/
 - **Cache config tests**: `CacheConfigTest` covers property binding, bounds, stats and startup validation
 - **Frost tests**: `FrostWarningServiceTest` covers every bucket and the `32.0`/`25.0`/`15.0` boundaries,
   `FrostSeverityTest` asserts wire values and message-bundle presence, `WeatherControllerTest` asserts the JSON contract
+- **Frontend tests**: Vitest + jsdom + Testing Library (`npm test`); `temperature.test.ts` covers every band
+  boundary, `WeatherMap.test.tsx` mocks `react-leaflet` (no tiles or layout in jsdom), `WeatherPopup.test.tsx`
+  covers loading/success/error+retry, `App.test.tsx` asserts a click becomes one request for the rounded point
 - **Provider tests**: `WeatherAggregationServiceTest` covers both-healthy, fail-fast fallback, primary/secondary
   timeouts and both-fail using latches (no `Thread.sleep`); `OpenMeteoApiClientTest` covers °F mapping and WMO codes
 - **History tests**: `WeatherRecordRepositoryTest` (`@DataJpaTest`) verifies the derived finder, `WeatherHistoryServiceTest`

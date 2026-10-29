@@ -8,6 +8,10 @@ export interface WeatherData {
   description: string;
   apparentTemperature: number;
   summary: string;
+  source?: 'nws' | 'open-meteo' | 'averaged';
+  frost_warning?: boolean;
+  frost_severity?: 'none' | 'light' | 'moderate' | 'severe';
+  frost_advisory?: string;
 }
 
 export interface Coordinates {

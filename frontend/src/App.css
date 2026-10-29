@@ -184,6 +184,146 @@
   margin-bottom: 1rem;
 }
 
+.weather-map-section {
+  width: 100%;
+  max-width: 900px;
+}
+
+.weather-map-section h2 {
+  margin-bottom: 0.25rem;
+}
+
+.weather-map-hint {
+  font-size: 0.9rem;
+  opacity: 0.75;
+  margin-bottom: 1rem;
+}
+
+/* Leaflet renders 0px tall without an explicit height. */
+.weather-map {
+  height: 420px;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  z-index: 0;
+}
+
+.temperature-marker-icon {
+  background: transparent;
+  border: none;
+}
+
+.temperature-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.temperature-marker--pending {
+  width: 16px;
+  height: 16px;
+  margin: 15px;
+  background: #64748b;
+  animation: pulse 1.5s infinite;
+}
+
+.temperature-marker--freezing {
+  background: #1d4ed8;
+}
+
+.temperature-marker--cold {
+  background: #0891b2;
+}
+
+.temperature-marker--mild {
+  background: #15803d;
+}
+
+.temperature-marker--warm {
+  background: #ea580c;
+}
+
+.temperature-marker--hot {
+  background: #dc2626;
+}
+
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: #1f2430;
+  color: #f4f6fb;
+}
+
+.weather-popup {
+  min-width: 180px;
+  text-align: left;
+}
+
+.weather-popup__temperature {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.weather-popup__items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.weather-popup__item {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0;
+}
+
+.weather-popup__item dt {
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+.weather-popup__item dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.weather-popup__advisory {
+  margin: 0.6rem 0 0;
+  font-size: 0.85rem;
+  color: #93c5fd;
+}
+
+.weather-popup--loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.weather-popup--error p {
+  margin: 0 0 0.5rem;
+  color: #ffb4b4;
+}
+
+.weather-popup button {
+  margin-top: 0.6rem;
+}
+
+@media (max-width: 640px) {
+  .weather-map {
+    height: 320px;
+  }
+}
+
 @media (prefers-color-scheme: light) {
   .server-status {
     background: rgba(0, 128, 0, 0.1);

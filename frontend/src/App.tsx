@@ -1,14 +1,18 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { WeatherDisplay } from './components/WeatherDisplay';
+import { WeatherMap } from './components/WeatherMap';
 import { weatherApi, Coordinates } from './api/weatherClient';
 import './App.css';
 
+const DEFAULT_COORDINATES: Coordinates = {
+  lat: 37.7749, // Default: San Francisco
+  lng: -122.4194,
+};
+
 function App() {
-  const [coordinates, setCoordinates] = useState<Coordinates>({
-    lat: 37.7749,  // Default: San Francisco
-    lng: -122.4194,
-  });
+  const [coordinates, setCoordinates] = useState<Coordinates>(DEFAULT_COORDINATES);
+  const [points, setPoints] = useState<Coordinates[]>([DEFAULT_COORDINATES]);
   const [inputLat, setInputLat] = useState(coordinates.lat.toString());
   const [inputLng, setInputLng] = useState(coordinates.lng.toString());
 
@@ -17,13 +21,25 @@ function App() {
     queryFn: weatherApi.getStatus,
   });
 
+  // Single source of truth: the form, the geolocation button and a map click all funnel through here.
+  const selectCoordinates = (next: Coordinates) => {
+    setCoordinates(next);
+    setInputLat(next.lat.toString());
+    setInputLng(next.lng.toString());
+    setPoints((current) =>
+      current.some((point) => point.lat === next.lat && point.lng === next.lng)
+        ? current
+        : [...current, next],
+    );
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const lat = parseFloat(inputLat);
     const lng = parseFloat(inputLng);
 
     if (!isNaN(lat) && !isNaN(lng)) {
-      setCoordinates({ lat, lng });
+      selectCoordinates({ lat, lng });
     }
   };
 
@@ -32,9 +48,7 @@ function App() {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude } = position.coords;
-          setCoordinates({ lat: latitude, lng: longitude });
-          setInputLat(latitude.toString());
-          setInputLng(longitude.toString());
+          selectCoordinates({ lat: latitude, lng: longitude });
         },
         (error) => {
           console.error('Error getting location:', error);
@@ -54,6 +68,7 @@ function App() {
       </header>
 
       <main className="app-main">
+        <WeatherMap coordinates={coordinates} points={points} onSelect={selectCoordinates} />
         <div className="coordinates-form">
           <h2>Enter Location</h2>
           <form onSubmit={handleSubmit}>
