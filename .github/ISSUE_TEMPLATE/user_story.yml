@@ -1,0 +1,58 @@
+---
+name: "🚀 User Story"
+description: "Create a structured, development-ready user story for the team or AI agents."
+title: "Story: [Short Feature Name]"
+labels: ["user-story", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please fill out this form completely. Structured inputs help automated tools and team members understand the exact scope of this feature.
+
+  - type: textarea
+    id: narrative
+    attributes:
+      label: "User Story Narrative"
+      description: "State the story from the user's perspective."
+      placeholder: |
+        As a [type of user]
+        I want to [perform a clear action]
+        So that [achieve a specific benefit or value]
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: "Acceptance Criteria (Gherkin Format)"
+      description: "Define the specific conditions that must be met for this story to be marked complete."
+      placeholder: |
+        - Given [initial context or setup]
+        - When [action is taken by the user]
+        - Then [expected measurable outcome]
+    validations:
+      required: true
+
+  - type: textarea
+    id: technical-context
+    attributes:
+      label: "Technical Context & Scope"
+      description: "List target directories, architectural constraints, dependencies, API requirements, or specific files."
+      placeholder: |
+        - Target files/components: (e.g., `src/components/`, `utils/`)
+        - API Endpoints needed:
+        - Design / UI details:
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: definition-of-done
+    attributes:
+      label: "Definition of Done Checklist"
+      options:
+        - label: "Unit tests are written and passing (`npm test` passes successfully)"
+          required: true
+        - label: "UI matches components style (if applicable)"
+          required: false
+        - label: "Documentation or inline comments updated"
+          required: false
