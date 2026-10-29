@@ -22,7 +22,11 @@ const WEATHER: WeatherData = {
   summary: 'Clear skies',
 };
 
-const renderPopup = (overrides?: { compareCount?: number; onCompare?: () => void }) => {
+const renderPopup = (overrides?: {
+  compareCount?: number;
+  pinnedCount?: number;
+  onCompare?: () => void;
+}) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
@@ -91,10 +95,10 @@ describe('WeatherPopup', () => {
 
     const compareButton = await screen.findByRole('button', { name: /compare these 1 locations/i });
     expect(compareButton).toBeDisabled();
-    expect(screen.getByText(/select 2 to 5 map locations/i)).toBeInTheDocument();
+    expect(screen.getByText(/select at least 2 map locations/i)).toBeInTheDocument();
   });
 
-  it('compares the selected locations once 2 to 5 are pinned', async () => {
+  it('compares the selected locations once 2 or more are pinned', async () => {
     getWeather.mockResolvedValue(WEATHER);
     const onCompare = vi.fn();
 
@@ -102,9 +106,32 @@ describe('WeatherPopup', () => {
 
     const compareButton = await screen.findByRole('button', { name: /compare these 3 locations/i });
     expect(compareButton).toBeEnabled();
-    expect(screen.queryByText(/select 2 to 5 map locations/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/select at least 2 map locations/i)).not.toBeInTheDocument();
 
     await userEvent.click(compareButton);
     expect(onCompare).toHaveBeenCalledTimes(1);
+  });
+
+  it('still compares when more than 5 pins exist, explaining that only the most recent are used', async () => {
+    getWeather.mockResolvedValue(WEATHER);
+    const onCompare = vi.fn();
+
+    renderPopup({ compareCount: 5, pinnedCount: 8, onCompare });
+
+    const compareButton = await screen.findByRole('button', { name: /compare these 5 locations/i });
+    expect(compareButton).toBeEnabled();
+    expect(screen.getByText(/comparing the 5 most recent of 8 pins/i)).toBeInTheDocument();
+
+    await userEvent.click(compareButton);
+    expect(onCompare).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not mention the cap when the pins fit inside it', async () => {
+    getWeather.mockResolvedValue(WEATHER);
+
+    renderPopup({ compareCount: 4, pinnedCount: 4 });
+
+    await screen.findByRole('button', { name: /compare these 4 locations/i });
+    expect(screen.queryByText(/most recent of/i)).not.toBeInTheDocument();
   });
 });

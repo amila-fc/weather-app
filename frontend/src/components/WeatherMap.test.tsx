@@ -168,4 +168,24 @@ describe('WeatherMap', () => {
 
     expect(onCompare).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps every pin but caps the comparison at the 5 most recent', async () => {
+    getWeather.mockResolvedValue(weather(55));
+    const manyPoints: Coordinates[] = Array.from({ length: 8 }, (_, index) => ({
+      lat: 10 + index,
+      lng: 20 + index,
+    }));
+
+    const { onCompare } = renderMap({ points: manyPoints });
+
+    // all 8 markers stay on the map
+    expect(screen.getAllByTestId('marker')).toHaveLength(manyPoints.length);
+
+    const compareButtons = await screen.findAllByRole('button', { name: /compare these 5 locations/i });
+    expect(compareButtons[0]).toBeEnabled();
+    expect(screen.getAllByText(/comparing the 5 most recent of 8 pins/i).length).toBeGreaterThan(0);
+
+    await userEvent.click(compareButtons[0]);
+    expect(onCompare).toHaveBeenCalledTimes(1);
+  });
 });

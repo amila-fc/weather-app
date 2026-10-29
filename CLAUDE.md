@@ -194,8 +194,9 @@ weather-app/
 - **Features**:
   - Real-time weather display
   - Interactive map: click anywhere to load that location, popup with the conditions, temperature-coloured
-    markers; pins stop at 5 and the popup's "Compare these N locations" action (enabled from 2 pins) hands the
-    pinned set to the comparison tab and switches to it
+    markers; pins are unlimited (every pick stays on the map) while the popup's "Compare these N locations" action
+    (enabled from 2 pins) compares only the **5 most recent** ones, hands them to the comparison tab and switches
+    to it
   - Comparison tab: up to 5 locations side by side, warmest/coldest and most/least humid marked with a text
     alternative, per-column loading/error isolation; saved combinations persist in `localStorage` under
     `weather-app:favorite-combinations:v1` (coordinates, name and timestamp only)

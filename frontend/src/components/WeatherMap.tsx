@@ -3,6 +3,7 @@ import L from 'leaflet';
 import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import { Coordinates } from '../api/weatherClient';
 import { useWeatherQuery } from '../api/weatherQuery';
+import { MAX_COMPARISON_LOCATIONS } from '../hooks/useComparisonLocations';
 import { roundCoordinate } from '../utils/coordinates';
 import { getTemperatureBand } from '../utils/temperature';
 import { WeatherPopup } from './WeatherPopup';
@@ -52,8 +53,9 @@ const MapController: React.FC<{ coordinates: Coordinates }> = ({ coordinates }) 
 const WeatherMarker: React.FC<{
   point: Coordinates;
   compareCount: number;
+  pinnedCount: number;
   onCompare: () => void;
-}> = ({ point, compareCount, onCompare }) => {
+}> = ({ point, compareCount, pinnedCount, onCompare }) => {
   const { data } = useWeatherQuery(point);
 
   const modifier = data
@@ -75,38 +77,49 @@ const WeatherMarker: React.FC<{
   return (
     <Marker position={[point.lat, point.lng]} icon={icon}>
       <Popup>
-        <WeatherPopup coordinates={point} compareCount={compareCount} onCompare={onCompare} />
+        <WeatherPopup
+          coordinates={point}
+          compareCount={compareCount}
+          pinnedCount={pinnedCount}
+          onCompare={onCompare}
+        />
       </Popup>
     </Marker>
   );
 };
 
-export const WeatherMap: React.FC<WeatherMapProps> = ({ coordinates, points, onSelect, onCompare }) => (
-  <section className="weather-map-section">
-    <h2>Explore the map</h2>
-    <p className="weather-map-hint" id="weather-map-hint">
-      Click the map to load that location's weather, or enter coordinates in the form to use the
-      keyboard.
-    </p>
-    <MapContainer
-      center={[coordinates.lat, coordinates.lng]}
-      zoom={9}
-      scrollWheelZoom
-      className="weather-map"
-      aria-describedby="weather-map-hint"
-      aria-label="Weather map"
-    >
-      <TileLayer url={OSM_TILE_URL} attribution={OSM_ATTRIBUTION} />
-      <MapEvents onSelect={onSelect} />
-      <MapController coordinates={coordinates} />
-      {points.map((point) => (
-        <WeatherMarker
-          key={`${point.lat},${point.lng}`}
-          point={point}
-          compareCount={points.length}
-          onCompare={onCompare}
-        />
-      ))}
-    </MapContainer>
-  </section>
-);
+export const WeatherMap: React.FC<WeatherMapProps> = ({ coordinates, points, onSelect, onCompare }) => {
+  // Every pin stays on the map; the comparison only ever takes the most recent ones.
+  const compareCount = Math.min(points.length, MAX_COMPARISON_LOCATIONS);
+
+  return (
+    <section className="weather-map-section">
+      <h2>Explore the map</h2>
+      <p className="weather-map-hint" id="weather-map-hint">
+        Click the map to load that location's weather, or enter coordinates in the form to use the
+        keyboard. Comparing uses the {MAX_COMPARISON_LOCATIONS} most recent pins.
+      </p>
+      <MapContainer
+        center={[coordinates.lat, coordinates.lng]}
+        zoom={9}
+        scrollWheelZoom
+        className="weather-map"
+        aria-describedby="weather-map-hint"
+        aria-label="Weather map"
+      >
+        <TileLayer url={OSM_TILE_URL} attribution={OSM_ATTRIBUTION} />
+        <MapEvents onSelect={onSelect} />
+        <MapController coordinates={coordinates} />
+        {points.map((point) => (
+          <WeatherMarker
+            key={`${point.lat},${point.lng}`}
+            point={point}
+            compareCount={compareCount}
+            pinnedCount={points.length}
+            onCompare={onCompare}
+          />
+        ))}
+      </MapContainer>
+    </section>
+  );
+};

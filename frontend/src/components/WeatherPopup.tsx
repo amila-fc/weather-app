@@ -6,14 +6,23 @@ import { SkeletonBlock, SkeletonText } from './Skeleton';
 
 interface WeatherPopupProps {
   coordinates: Coordinates;
-  /** How many locations are currently selected on the map. */
+  /** How many locations will be compared (already capped at the comparison limit). */
   compareCount?: number;
+  /** Total pins on the map, so the popup can explain that only the most recent ones are compared. */
+  pinnedCount?: number;
   onCompare?: () => void;
 }
 
-export const WeatherPopup: React.FC<WeatherPopupProps> = ({ coordinates, compareCount, onCompare }) => {
+export const WeatherPopup: React.FC<WeatherPopupProps> = ({
+  coordinates,
+  compareCount,
+  pinnedCount,
+  onCompare,
+}) => {
   const { data, isLoading, error, refetch } = useWeatherQuery(coordinates);
   const selectedCount = compareCount ?? 0;
+  const totalPinned = pinnedCount ?? selectedCount;
+  const truncated = totalPinned > selectedCount;
   const canCompare = selectedCount >= 2 && selectedCount <= MAX_COMPARISON_LOCATIONS;
 
   if (isLoading) {
@@ -81,7 +90,12 @@ export const WeatherPopup: React.FC<WeatherPopupProps> = ({ coordinates, compare
       </button>
       {!canCompare && (
         <p className="weather-popup__hint">
-          Select 2 to {MAX_COMPARISON_LOCATIONS} map locations to compare them.
+          Select at least 2 map locations to compare them.
+        </p>
+      )}
+      {canCompare && truncated && (
+        <p className="weather-popup__hint">
+          Comparing the {selectedCount} most recent of {totalPinned} pins.
         </p>
       )}
     </div>

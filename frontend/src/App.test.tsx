@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { weatherApi } from './api/weatherClient';
 import type { WeatherData } from './api/weatherClient';
+import { trendsApi } from './api/trendsClient';
+import type { WeatherTrends } from './api/trendsClient';
 import { clearAlerts, pushAlerts } from './hooks/useAlerts';
 import { renderWithProviders } from './test/renderWithProviders';
 
@@ -36,8 +38,42 @@ vi.mock('./api/weatherClient', () => ({
   weatherApi: { getWeather: vi.fn(), getStatus: vi.fn() },
 }));
 
+vi.mock('./api/trendsClient', () => ({
+  trendsApi: { getTrends: vi.fn() },
+  default: { getTrends: vi.fn() },
+}));
+
 const getWeather = vi.mocked(weatherApi.getWeather);
 const getStatus = vi.mocked(weatherApi.getStatus);
+const getTrends = vi.mocked(trendsApi.getTrends);
+
+const TRENDS: WeatherTrends = {
+  latitude: 37.7749,
+  longitude: -122.4194,
+  generatedAt: '2026-10-30T00:00:00Z',
+  mock: true,
+  hours: 24,
+  utcOffsetMinutes: -420,
+  current: {
+    temperature: 61.2,
+    humidity: 72,
+    windSpeedMph: 9.4,
+    windDirectionDegrees: 285,
+    feelsLikeTemperature: 59.8,
+    description: 'Partly cloudy',
+  },
+  hourly: Array.from({ length: 24 }, (_, index) => ({
+    time: `2026-10-29T${String(index).padStart(2, '0')}:00:00Z`,
+    temperature: 55 + index * 0.5,
+    humidity: 70,
+    windSpeedMph: 6,
+    windDirectionDegrees: 270,
+    feelsLikeTemperature: 54 + index * 0.5,
+  })),
+  sunrise: '2026-10-30T14:31:00Z',
+  sunset: '2026-10-31T01:12:00Z',
+  polar: null,
+};
 
 const WEATHER: WeatherData = {
   temperature: 55,
@@ -53,9 +89,11 @@ describe('App', () => {
   beforeEach(() => {
     getWeather.mockReset();
     getStatus.mockReset();
+    getTrends.mockReset();
     leaflet.click = undefined;
     getStatus.mockResolvedValue('Server is running.');
     getWeather.mockResolvedValue(WEATHER);
+    getTrends.mockResolvedValue(TRENDS);
     window.location.hash = '';
     clearAlerts();
   });
@@ -112,6 +150,26 @@ describe('App', () => {
     expect(screen.queryByText('Explore the map')).not.toBeInTheDocument();
   });
 
+  it('lazy-loads the trends dashboard and keeps it in the hash', async () => {
+    renderApp();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Trends' }));
+
+    expect(window.location.hash).toBe('#trends');
+    expect(screen.getByRole('tab', { name: 'Trends' })).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByRole('heading', { name: '24-hour trends' })).toBeInTheDocument();
+    expect(getTrends).toHaveBeenCalledWith({ lat: 37.7749, lng: -122.4194 }, 24);
+  });
+
+  it('restores the trends tab from the hash on reload', async () => {
+    window.location.hash = '#trends';
+
+    renderApp();
+
+    expect(screen.getByRole('tab', { name: 'Trends' })).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByRole('heading', { name: '24-hour trends' })).toBeInTheDocument();
+  });
+
   it('hands the pinned map locations to the comparison tab', async () => {
     renderApp();
 
@@ -128,6 +186,34 @@ describe('App', () => {
     expect(screen.getByText('2/5 locations')).toBeInTheDocument();
     expect(await screen.findByRole('columnheader', { name: '47.0000, 8.0000' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: '37.7749, -122.4194' })).toBeInTheDocument();
+  });
+
+  it('keeps more than five pins but compares only the last five', async () => {
+    renderApp();
+
+    for (const step of [1, 2, 3, 4, 5, 6]) {
+      act(() => {
+        leaflet.click?.({ latlng: { lat: 10 * step, lng: 10 * step } });
+      });
+    }
+    await waitFor(() => expect(getWeather).toHaveBeenCalledWith({ lat: 60, lng: 60 }));
+
+    // seven pins in total: the default location plus the six clicks
+    expect(screen.getAllByTestId('marker')).toHaveLength(7);
+
+    const compareButtons = await screen.findAllByRole('button', { name: /compare these 5 locations/i });
+    await userEvent.click(compareButtons[0]);
+
+    expect(screen.getByText('5/5 locations')).toBeInTheDocument();
+    for (const step of [2, 3, 4, 5, 6]) {
+      expect(
+        await screen.findByRole('columnheader', { name: `${step * 10}.0000, ${step * 10}.0000` }),
+      ).toBeInTheDocument();
+    }
+    expect(screen.queryByRole('columnheader', { name: '10.0000, 10.0000' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('columnheader', { name: '37.7749, -122.4194' }),
+    ).not.toBeInTheDocument();
   });
 
   it('shows the notification bell in the top bar', () => {

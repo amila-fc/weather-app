@@ -7,7 +7,7 @@ import { WeatherMap } from './WeatherMap';
 import { LocationPicker } from './LocationPicker';
 
 interface CurrentWeatherTabProps {
-  /** Receives the selected map points and navigates to the comparison tab. */
+  /** Receives the most recent map points (at most the comparison limit) and navigates to that tab. */
   onCompare: (locations: Coordinates[]) => void;
 }
 
@@ -15,17 +15,18 @@ export const CurrentWeatherTab: React.FC<CurrentWeatherTabProps> = ({ onCompare 
   const { location: coordinates, setLocation: setCoordinates } = useActiveLocation();
   const [points, setPoints] = useState<Coordinates[]>([coordinates]);
 
-  // Single source of truth for the tab: the form, geolocation and map clicks all funnel through here.
-  // Pins stop at the comparison limit so the compare action always has a valid 2..5 set.
+  // Pins are unlimited: every point the user picks stays on the map. Only the comparison is capped, and it
+  // takes the most recent picks, so a long exploration session still compares the 5 latest locations.
   const selectCoordinates = (next: Coordinates) => {
     setCoordinates(next);
     setPoints((current) =>
-      current.some((point) => point.lat === next.lat && point.lng === next.lng) ||
-      current.length >= MAX_COMPARISON_LOCATIONS
+      current.some((point) => point.lat === next.lat && point.lng === next.lng)
         ? current
         : [...current, next],
     );
   };
+
+  const compareRecentLocations = () => onCompare(points.slice(-MAX_COMPARISON_LOCATIONS));
 
   return (
     <div
@@ -38,7 +39,7 @@ export const CurrentWeatherTab: React.FC<CurrentWeatherTabProps> = ({ onCompare 
         coordinates={coordinates}
         points={points}
         onSelect={selectCoordinates}
-        onCompare={() => onCompare(points)}
+        onCompare={compareRecentLocations}
       />
 
       <div className="coordinates-form">
