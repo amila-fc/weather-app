@@ -1,5 +1,6 @@
 package com.sample.weatherservice.controller;
 
+import com.sample.weatherservice.api.ErrorResponse;
 import com.sample.weatherservice.client.WeatherProviderException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,23 +58,5 @@ public class GlobalExceptionHandler {
         LOGGER.error("Unexpected error: ", e);
         ErrorResponse error = new ErrorResponse("Internal server error", "An unexpected error occurred");
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
-    }
-
-    static class ErrorResponse {
-        private final String error;
-        private final String message;
-
-        public ErrorResponse(String error, String message) {
-            this.error = error;
-            this.message = message;
-        }
-
-        public String getError() {
-            return error;
-        }
-
-        public String getMessage() {
-            return message;
-        }
     }
 }

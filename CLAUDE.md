@@ -75,6 +75,7 @@ weather-app/
 │       │   │   ├── WeatherCacheProperties.java # weather.cache.* binding
 │       │   │   ├── WeatherProviderProperties.java # weather.primary/secondary/averaging binding
 │       │   │   ├── WeatherHistoryProperties.java # weather.history.* binding
+│       │   │   ├── OpenApiConfig.java          # OpenAPI info + relative server (contract)
 │       │   │   ├── CorsConfig.java
 │       │   │   └── HttpClientConfig.java       # Per-provider HTTP clients + provider executor
 │       │   ├── client/
@@ -93,11 +94,15 @@ weather-app/
 │       │       ├── FrostAssessment.java       # Frost fields derived from temperature
 │       │       ├── WeatherSource.java         # nws | open-meteo | averaged
 │       │       ├── TrendDirection.java        # up | down | stable
+│       │       ├── ErrorResponse.java         # error
 │       │       └── WeatherHistoryResponse.java # History window + trend
 │       ├── main/resources/
 │       │   ├── application.properties
 │       │   └── messages.properties            # frost.advisory.* texts
 │       └── test/
+├── docs/
+│   ├── openapi.json        # Committed OpenAPI 3 contract (verified against /v3/api-docs)
+│   └── screenshots/        # README images
 ├── frontend/                # React application
 │   ├── build.gradle.kts    # Frontend build configuration
 │   ├── package.json        # NPM dependencies
@@ -160,6 +165,22 @@ weather-app/
   - `GET /api/weather?lat={latitude}&long={longitude}` - Get weather data
   - `GET /api/weather/history?lat={latitude}&long={longitude}&days={days}` - Recorded history + trend (`days` 1..30, default 7)
   - `GET /api/weather/trends?lat={latitude}&long={longitude}&hours={hours}` - 24-hour series + wind + sun times (`hours` 1..48, default 24)
+- **OpenAPI contract**: generated with springdoc (`org.springdoc:springdoc-openapi-starter-webmvc-ui`, pinned
+  because the Boot BOM does not manage it)
+  - Live document at `springdoc.api-docs.path` (`/v3/api-docs`), UI at `springdoc.swagger-ui.path`
+    (`/swagger-ui.html`); `springdoc.default-produces-media-type=application/json` is what keeps the JSON
+    operations from advertising `*/*`
+  - `config/OpenApiConfig` owns the `Info` block and a **relative** server (`/`), so the contract stays
+    host-agnostic instead of baking in whichever host generated it
+  - The `@Tag`/`@Operation`/`@Parameter`/`@ApiResponse` annotations live next to the mapping they describe in
+    `WeatherController`; schemas are not annotated twice — they come from the records and `Condition`, wire names
+    included (`frost_warning`, `source: nws|open-meteo|averaged`, `trend: up|down|stable`)
+  - `ErrorResponse` lives in `api/` (not inside `GlobalExceptionHandler`) so the 400/503 responses can reference
+    the envelope the handler actually returns
+  - `docs/openapi.json` is the committed copy for clients and review; `OpenApiContractTest` fails the build when it
+    disagrees with the generated document, and `backend/build.gradle.kts` declares the file as a `test` input so
+    editing it re-runs the suite instead of hitting a cached result. Regenerate it from `/v3/api-docs` after
+    changing an endpoint
 - **Weather API**: National Weather Service (api.weather.gov)
   - No API key required
   - Two-step process: coordinates → grid → weather data
@@ -192,7 +213,10 @@ weather-app/
   - `FeelsLikeCalculator`: provider `apparentTemperature` wins, else NWS wind chill (≤ 50°F and ≥ 3 mph), else Rothfusz heat index (≥ 80°F and ≥ 40 %), else the dry-bulb value
   - `SunriseSunsetCalculator`: NOAA solar-position maths, `Clock`-injected, null sun times with `polar: "day" | "night"` inside the polar circles. `utcOffsetMinutes` is the whole-hour offset implied by the longitude (the JDK has no coordinate → time zone lookup), so the sun times are exact while the displayed clock is an approximation during DST
   - Invalid `hours` or missing coordinates → 400
-- **Exception Handling**: `GlobalExceptionHandler` is the only place mapping exceptions to status codes  - `WeatherProviderException` → 503, invalid request parameters / bad `days` or `hours` → 400
+- **Exception Handling**: `GlobalExceptionHandler` is the only place mapping exceptions to status codes
+  - `WeatherProviderException` → 503, invalid request parameters / bad `days` or `hours` → 400
+  - Every error body is the shared `api/ErrorResponse(error, message)` record, which is also the schema the
+    OpenAPI contract references for those responses
   - Unknown paths (`NoResourceFoundException`) → 404 and unsupported methods → 405, instead of falling through
     to the catch-all 500 handler; the catch-all stays for genuinely unexpected errors
 
@@ -426,6 +450,11 @@ weather-app/
 - **Mocking**: Mockito for external API calls
 - **Test Coverage**: Controller endpoints with success and error cases, cache hit/miss/expiry/keying
   (`WeatherServiceTest` uses an injected Caffeine `Ticker` as a fake clock, so no `Thread.sleep`)
+- **Contract test**: `OpenApiContractTest` (`@SpringBootTest` + `MockMvc`) reads `/v3/api-docs` and asserts the four
+  documented paths, the required `lat`/`long` parameters, the documented status codes (`200`/`400`/`503`), the
+  optional `days`/`hours` windows, the wire names and enum values of `Condition`/`WeatherHistoryResponse`, and that
+  `docs/openapi.json` matches the generated document (numbers compared by value, object keys as a set). Changing an
+  endpoint therefore requires regenerating the committed contract in the same commit
 - **Cache config tests**: `CacheConfigTest` covers property binding, bounds, stats and startup validation
 - **Frost tests**: `FrostWarningServiceTest` covers every bucket and the `32.0`/`25.0`/`15.0` boundaries,
   `FrostSeverityTest` asserts wire values and message-bundle presence, `WeatherControllerTest` asserts the JSON contract

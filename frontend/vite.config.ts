@@ -37,7 +37,8 @@ export default defineConfig(({ mode }) => {
             // The bundle analyse report is a local artefact, never part of the shipped cache.
             globIgnores: ['**/stats.html'],
             navigateFallback: 'index.html',
-            navigateFallbackDenylist: [/^\/api\//],
+            // The SPA shell must not answer for the API or for the OpenAPI/Swagger documents.
+            navigateFallbackDenylist: [/^\/api\//, /^\/v3\//, /^\/swagger-ui/],
             cleanupOutdatedCaches: true,
             runtimeCaching: [
               {

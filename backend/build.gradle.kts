@@ -22,6 +22,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-cache")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    // Generated OpenAPI 3 contract for the REST layer (served at /v3/api-docs, UI at /swagger-ui.html).
+    // springdoc is not managed by the Spring Boot BOM, so the version is pinned to the Boot 3.3 line.
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
     implementation("com.github.ben-manes.caffeine:caffeine")
     implementation("org.apache.httpcomponents:httpclient:4.5.6")
     runtimeOnly("com.h2database:h2")
@@ -48,6 +51,10 @@ tasks.jacocoTestReport {
 }
 
 tasks.test {
+    // OpenApiContractTest reads the committed contract from the repository root, which is outside this
+    // project, so it has to be declared as an input or Gradle would serve a stale test result.
+    inputs.files(layout.projectDirectory.file("../docs/openapi.json"))
+        .withPropertyName("openApiContract")
     finalizedBy(tasks.jacocoTestReport)
 }
 

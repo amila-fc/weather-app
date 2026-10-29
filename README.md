@@ -76,6 +76,7 @@ java -jar backend/build/libs/backend-0.0.1-SNAPSHOT.jar
 - **Application**: http://localhost:8080
 - **API Status**: http://localhost:8080/api/status
 - **Weather API**: http://localhost:8080/api/weather?lat=40.7128&long=-74.0060
+- **API contract**: http://localhost:8080/v3/api-docs (Swagger UI at http://localhost:8080/swagger-ui.html)
 
 ## Project Structure
 
@@ -89,6 +90,8 @@ weather-app/
 │   └── src/
 │       ├── api/            # API client
 │       └── components/     # React components
+├── docs/
+│   └── openapi.json        # Committed OpenAPI 3 contract of the REST layer
 ├── EXERCISE.md             # Coding challenges
 ├── CLAUDE.md              # AI assistant instructions
 └── build.gradle.kts       # Root build configuration
@@ -110,14 +113,30 @@ weather-app/
 
 ## API Documentation
 
+### OpenAPI contract
+
+The REST layer publishes an OpenAPI 3 contract that is generated from the controller code (springdoc), so it
+cannot drift from the implementation:
+
+| Where | What |
+| --- | --- |
+| http://localhost:8080/v3/api-docs | Live contract (JSON) |
+| http://localhost:8080/swagger-ui.html | Interactive Swagger UI |
+| [docs/openapi.json](docs/openapi.json) | Committed copy, for clients and review |
+
+The annotations that shape it live in `WeatherController` and `config/OpenApiConfig`; payload schemas come straight
+from the response records and `Condition`, including their Jackson wire names. `OpenApiContractTest` fails the build
+when the generated document and the committed copy disagree, so regenerate `docs/openapi.json` from
+`/v3/api-docs` after changing an endpoint.
+
 ### Endpoints
 
 #### `GET /api/status`
 Health check endpoint
-- **Response**: `"Server is running."`
+- **Response**: `"Server is running."` (`text/plain`)
 
 #### `GET /api/weather`
-Get current weather data
+Current conditions for a location, with the frost assessment applied
 - **Parameters**:
   - `lat` (required): Latitude
   - `long` (required): Longitude
@@ -128,7 +147,38 @@ Get current weather data
   "humidity": 67.995,
   "description": "Clear",
   "apparentTemperature": 55.796,
-  "summary": "Clear skies..."
+  "summary": "Clear skies...",
+  "cached": false,
+  "source": "averaged",
+  "frost_warning": false,
+  "frost_severity": "none",
+  "frost_advisory": "No frost expected."
+}
+```
+- **Errors**: `400` when a coordinate is missing or not a number, `503` when every upstream provider failed
+
+#### `GET /api/weather/history`
+Recorded queries for the window plus the least-squares temperature trend
+- **Parameters**:
+  - `lat` (required), `long` (required)
+  - `days` (optional, default `7`, `1`–`30`)
+- **Response**: `{ "latitude", "longitude", "days", "records": [...], "trend": "up|down|stable", "temperatureChange" }`
+
+#### `GET /api/weather/trends`
+Hourly series, current hour, sunrise and sunset for the location
+- **Parameters**:
+  - `lat` (required), `long` (required)
+  - `hours` (optional, default `24`, `1`–`48`)
+- **Response**: `{ "generatedAt", "mock", "hours", "utcOffsetMinutes", "current", "hourly": [...], "sunrise", "sunset", "polar" }`
+
+### Error responses
+
+Every error is produced by `GlobalExceptionHandler` and uses one envelope:
+
+```json
+{
+  "error": "Invalid request",
+  "message": "days must be between 1 and 30"
 }
 ```
 

@@ -1,0 +1,493 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Weather Service API",
+    "description": "Current conditions, recorded history and the 24-hour trends series.\n\nTemperatures are degrees Fahrenheit, humidity is a percentage, and wind direction is the bearing the\nwind blows from, clockwise from north. A 400 means the request itself was invalid (a missing or\nnon-numeric coordinate, or a window outside the configured bounds); a 503 means every upstream\nprovider failed, in which case nothing is recorded in the history.",
+    "version": "0.0.1-SNAPSHOT"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "The origin this API is served from"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Weather",
+      "description": "Current conditions, recorded history and the 24-hour trends series"
+    }
+  ],
+  "paths": {
+    "/api/weather": {
+      "get": {
+        "tags": [
+          "Weather"
+        ],
+        "summary": "Current weather conditions",
+        "description": "Aggregates the configured providers (NWS primary, Open-Meteo fallback and averaging partner) and\napplies the frost assessment derived from the returned temperature. Every successful call is\nrecorded in the weather history, cache hits included.",
+        "operationId": "getWeather",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "description": "Latitude in decimal degrees",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            },
+            "example": 47
+          },
+          {
+            "name": "long",
+            "in": "query",
+            "description": "Longitude in decimal degrees",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            },
+            "example": 8
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current conditions with the frost assessment applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Condition"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A coordinate is missing or not a number",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Every weather provider failed, so no history row was written",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/weather/trends": {
+      "get": {
+        "tags": [
+          "Weather"
+        ],
+        "summary": "24-hour trends series",
+        "description": "Hourly temperature, humidity, wind and feels-like series for the location, together with sunrise\nand sunset. The payload carries \"mock\": true while the series is generated rather than\nobserved.",
+        "operationId": "getTrends",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "description": "Latitude in decimal degrees",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            },
+            "example": 47
+          },
+          {
+            "name": "long",
+            "in": "query",
+            "description": "Longitude in decimal degrees",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            },
+            "example": 8
+          },
+          {
+            "name": "hours",
+            "in": "query",
+            "description": "Series length in hours. Defaults to 24 and must be between 1 and 48",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "example": 24
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hourly series, current hour and sun times",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeatherTrendsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A coordinate is missing or not a number, or hours is outside the allowed window",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/weather/history": {
+      "get": {
+        "tags": [
+          "Weather"
+        ],
+        "summary": "Recorded history and temperature trend",
+        "description": "Returns the ascending weather records written for these coordinates inside the window, plus the\nleast-squares temperature trend. History lives in an in-memory database, so it is lost on\nrestart.",
+        "operationId": "getHistory",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "description": "Latitude in decimal degrees",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            },
+            "example": 47
+          },
+          {
+            "name": "long",
+            "in": "query",
+            "description": "Longitude in decimal degrees",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            },
+            "example": 8
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "description": "Window in days, ending now. Defaults to 7 and must be between 1 and 30",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "example": 3
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ascending records for the window plus the trend",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeatherHistoryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A coordinate is missing or not a number, or days is outside the allowed window",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/status": {
+      "get": {
+        "tags": [
+          "Weather"
+        ],
+        "summary": "Health check",
+        "description": "Returns a fixed sentence while the service is up.",
+        "operationId": "getWeather_1",
+        "responses": {
+          "200": {
+            "description": "The service is running",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "example": "Server is running."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "Condition": {
+        "type": "object",
+        "properties": {
+          "temperature": {
+            "type": "number",
+            "format": "double"
+          },
+          "humidity": {
+            "type": "number",
+            "format": "double"
+          },
+          "description": {
+            "type": "string"
+          },
+          "apparentTemperature": {
+            "type": "number",
+            "format": "double"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "cached": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "nws",
+              "open-meteo",
+              "averaged"
+            ]
+          },
+          "windSpeedMph": {
+            "type": "number",
+            "format": "double"
+          },
+          "windDirectionDegrees": {
+            "type": "number",
+            "format": "double"
+          },
+          "frost_warning": {
+            "type": "boolean"
+          },
+          "frost_severity": {
+            "type": "string",
+            "enum": [
+              "none",
+              "light",
+              "moderate",
+              "severe"
+            ]
+          },
+          "frost_advisory": {
+            "type": "string"
+          }
+        }
+      },
+      "Current": {
+        "type": "object",
+        "properties": {
+          "temperature": {
+            "type": "number",
+            "format": "double"
+          },
+          "humidity": {
+            "type": "number",
+            "format": "double"
+          },
+          "windSpeedMph": {
+            "type": "number",
+            "format": "double"
+          },
+          "windDirectionDegrees": {
+            "type": "number",
+            "format": "double"
+          },
+          "feelsLikeTemperature": {
+            "type": "number",
+            "format": "double"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      },
+      "HourlyWeatherPoint": {
+        "type": "object",
+        "properties": {
+          "time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "temperature": {
+            "type": "number",
+            "format": "double"
+          },
+          "humidity": {
+            "type": "number",
+            "format": "double"
+          },
+          "windSpeedMph": {
+            "type": "number",
+            "format": "double"
+          },
+          "windDirectionDegrees": {
+            "type": "number",
+            "format": "double"
+          },
+          "feelsLikeTemperature": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "WeatherTrendsResponse": {
+        "type": "object",
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "mock": {
+            "type": "boolean"
+          },
+          "hours": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "utcOffsetMinutes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "current": {
+            "$ref": "#/components/schemas/Current"
+          },
+          "hourly": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HourlyWeatherPoint"
+            }
+          },
+          "sunrise": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sunset": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "polar": {
+            "type": "string"
+          }
+        }
+      },
+      "Entry": {
+        "type": "object",
+        "properties": {
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "temperature": {
+            "type": "number",
+            "format": "double"
+          },
+          "humidity": {
+            "type": "number",
+            "format": "double"
+          },
+          "apparentTemperature": {
+            "type": "number",
+            "format": "double"
+          },
+          "description": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "nws",
+              "open-meteo",
+              "averaged"
+            ]
+          },
+          "cached": {
+            "type": "boolean"
+          }
+        }
+      },
+      "WeatherHistoryResponse": {
+        "type": "object",
+        "properties": {
+          "latitude": {
+            "type": "number"
+          },
+          "longitude": {
+            "type": "number"
+          },
+          "days": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Entry"
+            }
+          },
+          "trend": {
+            "type": "string",
+            "enum": [
+              "up",
+              "down",
+              "stable"
+            ]
+          },
+          "temperatureChange": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      }
+    }
+  }
+}
