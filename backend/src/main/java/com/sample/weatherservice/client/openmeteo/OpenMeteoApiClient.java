@@ -26,7 +26,8 @@ public class OpenMeteoApiClient implements WeatherProvider {
     private static final Logger LOGGER = LoggerFactory.getLogger(OpenMeteoApiClient.class);
 
     private static final String CURRENT_PARAMETERS =
-            "current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code";
+            "current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,"
+                    + "wind_speed_10m,wind_direction_10m";
 
     private final WeatherProviderProperties properties;
     private final HttpClient httpClient;
@@ -77,7 +78,7 @@ public class OpenMeteoApiClient implements WeatherProvider {
 
     String buildUrl(final double latitude, final double longitude) {
         return String.format(Locale.ROOT,
-                "%s?latitude=%.4f&longitude=%.4f&%s&temperature_unit=fahrenheit&timezone=UTC",
+                "%s?latitude=%.4f&longitude=%.4f&%s&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=UTC",
                 properties.getSecondary().getBaseUrl(), latitude, longitude, CURRENT_PARAMETERS);
     }
 
@@ -95,8 +96,15 @@ public class OpenMeteoApiClient implements WeatherProvider {
                 ? current.get("apparent_temperature").asDouble()
                 : temperature;
         final String description = describe(current.path("weather_code").asInt(-1));
+        final Double windSpeedMph = current.hasNonNull("wind_speed_10m")
+                ? current.get("wind_speed_10m").asDouble()
+                : null;
+        final Double windDirectionDegrees = current.hasNonNull("wind_direction_10m")
+                ? current.get("wind_direction_10m").asDouble()
+                : null;
 
         return new Condition(temperature, humidity, description, apparentTemperature, description)
+                .withWind(windSpeedMph, windDirectionDegrees)
                 .withSource(WeatherSource.OPEN_METEO);
     }
 

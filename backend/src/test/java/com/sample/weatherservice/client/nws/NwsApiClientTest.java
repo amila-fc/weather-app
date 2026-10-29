@@ -8,6 +8,7 @@ import org.apache.http.impl.client.HttpClientBuilder;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -132,5 +133,46 @@ class NwsApiClientTest {
     void toFahrenheit_negativeTen_returnsFourteen() {
         // when + then
         assertEquals(14.0, NwsApiClient.toFahrenheit(-10.0), 0.0001);
+    }
+
+    @Test
+    void parseWeatherData_convertsWindFromKilometersPerHourAndKeepsTheDirection() throws Exception {
+        // given 16.09344 km/h is exactly 10 mph
+        JsonNode observation = new ObjectMapper().readTree("""
+                {"properties": {"temperature": {"value": 10.0}, "relativeHumidity": {"value": 70.0},
+                                "textDescription": "Clear",
+                                "windSpeed": {"value": 16.09344}, "windDirection": {"value": 285.0}}}
+                """);
+
+        // when
+        Condition condition = NwsApiClient.parseWeatherData(observation, new ObjectMapper().createObjectNode());
+
+        // then
+        assertEquals(10.0, condition.getWindSpeedMph(), 0.0001);
+        assertEquals(285.0, condition.getWindDirectionDegrees(), 0.0001);
+    }
+
+    @Test
+    void parseWeatherData_withoutWindLeavesBothWindFieldsNull() throws Exception {
+        // given
+        JsonNode observation = new ObjectMapper().readTree("""
+                {"properties": {"temperature": {"value": 10.0}, "relativeHumidity": {"value": 70.0},
+                                "textDescription": "Clear"}}
+                """);
+
+        // when
+        Condition condition = NwsApiClient.parseWeatherData(observation, new ObjectMapper().createObjectNode());
+
+        // then
+        assertNull(condition.getWindSpeedMph());
+        assertNull(condition.getWindDirectionDegrees());
+    }
+
+    @Test
+    void toMph_convertsAndRounds() {
+        // when + then
+        assertEquals(10.0, NwsApiClient.toMph(16.09344), 0.0001);
+        assertEquals(62.1, NwsApiClient.toMph(100.0), 0.0001);
+        assertEquals(0.0, NwsApiClient.toMph(0.0), 0.0001);
     }
 }

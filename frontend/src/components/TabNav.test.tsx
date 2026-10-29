@@ -37,14 +37,18 @@ describe('TabNav', () => {
     expect(screen.getByRole('tab', { name: 'Current weather' })).toHaveFocus();
 
     await userEvent.keyboard('{ArrowRight}');
+    expect(onChange).toHaveBeenLastCalledWith('trends');
+    expect(screen.getByRole('tab', { name: 'Trends' })).toHaveFocus();
+    expect(screen.getByRole('tab', { name: 'Trends' })).toHaveAttribute('aria-selected', 'true');
+
+    await userEvent.keyboard('{ArrowRight}');
     expect(onChange).toHaveBeenLastCalledWith('compare');
     expect(screen.getByRole('tab', { name: 'Compare' })).toHaveFocus();
-    expect(screen.getByRole('tab', { name: 'Compare' })).toHaveAttribute('aria-selected', 'true');
 
     await userEvent.keyboard('{ArrowLeft}');
-    expect(onChange).toHaveBeenLastCalledWith('current');
-    expect(screen.getByRole('tab', { name: 'Current weather' })).toHaveFocus();
-    expect(screen.getByRole('tab', { name: 'Current weather' })).toHaveAttribute('tabindex', '0');
+    expect(onChange).toHaveBeenLastCalledWith('trends');
+    expect(screen.getByRole('tab', { name: 'Trends' })).toHaveFocus();
+    expect(screen.getByRole('tab', { name: 'Trends' })).toHaveAttribute('tabindex', '0');
   });
 
   it('wraps around from the last tab to the first', async () => {

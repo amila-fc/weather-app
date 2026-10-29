@@ -147,6 +147,7 @@ weather-app/
   - `GET /api/status` - Server health check
   - `GET /api/weather?lat={latitude}&long={longitude}` - Get weather data
   - `GET /api/weather/history?lat={latitude}&long={longitude}&days={days}` - Recorded history + trend (`days` 1..30, default 7)
+  - `GET /api/weather/trends?lat={latitude}&long={longitude}&hours={hours}` - 24-hour series + wind + sun times (`hours` 1..48, default 24)
 - **Weather API**: National Weather Service (api.weather.gov)
   - No API key required
   - Two-step process: coordinates → grid → weather data
@@ -170,8 +171,16 @@ weather-app/
   - Coordinates are stored at 4 decimals with the cache-key convention; the only access path is the `(latitude, longitude, recorded_at)` index
   - `GET /api/weather/history?lat=&long=&days=` returns ascending records for the window (default `7`, max `30`), plus a least-squares trend (`up`/`down`/`stable`) and `temperatureChange` in °F/day (threshold `weather.history.trend-threshold`)
   - Invalid `days` or missing coordinates → 400; H2 is ephemeral, so history is lost on restart
-- **Exception Handling**: `GlobalExceptionHandler` is the only place mapping exceptions to status codes
-  - `WeatherProviderException` → 503, invalid request parameters / bad `days` → 400
+- **Wind**: `Condition` carries nullable `windSpeedMph` / `windDirectionDegrees`
+  - `NwsApiClient` converts `/properties/windSpeed/value` from km/h to mph (1 dp) and reads `windDirection`; `OpenMeteoApiClient` requests `wind_speed_10m,wind_direction_10m` with `wind_speed_unit=mph`
+  - `Condition.averaged` blends speed arithmetically and direction as a **circular mean**, so 350° + 10° = 0°; a null on one side falls back to the other
+- **Trends dashboard**: `GET /api/weather/trends?lat=&long=&hours=` (1..`weather.trends.max-hours`, default `weather.trends.default-hours`)
+  - `WeatherTrendsService` builds the series: `hours` ascending hourly points ending at the current hour (`Clock`-injected), `current` mirroring the last point, `utcOffsetMinutes` and today's sunrise/sunset
+  - While `weather.trends.mock=true` the series is generated from a deterministic model (diurnal sine on the location's clock + a coordinate-hash offset): same coordinates + hour → identical payload, and the response says `mock: true`; nothing is written to `weather_history`
+  - `FeelsLikeCalculator`: provider `apparentTemperature` wins, else NWS wind chill (≤ 50°F and ≥ 3 mph), else Rothfusz heat index (≥ 80°F and ≥ 40 %), else the dry-bulb value
+  - `SunriseSunsetCalculator`: NOAA solar-position maths, `Clock`-injected, null sun times with `polar: "day" | "night"` inside the polar circles. `utcOffsetMinutes` is the whole-hour offset implied by the longitude (the JDK has no coordinate → time zone lookup), so the sun times are exact while the displayed clock is an approximation during DST
+  - Invalid `hours` or missing coordinates → 400
+- **Exception Handling**: `GlobalExceptionHandler` is the only place mapping exceptions to status codes  - `WeatherProviderException` → 503, invalid request parameters / bad `days` or `hours` → 400
   - Unknown paths (`NoResourceFoundException`) → 404 and unsupported methods → 405, instead of falling through
     to the catch-all 500 handler; the catch-all stays for genuinely unexpected errors
 
@@ -190,7 +199,14 @@ weather-app/
   - Comparison tab: up to 5 locations side by side, warmest/coldest and most/least humid marked with a text
     alternative, per-column loading/error isolation; saved combinations persist in `localStorage` under
     `weather-app:favorite-combinations:v1` (coordinates, name and timestamp only)
-  - In-app tabs (`Current weather`, `Compare`) driven by `useState` and kept in `location.hash` — no router dependency
+  - In-app tabs (`Current weather`, `Trends`, `Compare`) driven by `useState` and kept in `location.hash`
+    (`#trends`, `#compare`) — no router dependency
+  - Trends tab (lazy-loaded chunk, `Suspense` fallback is the shared skeleton): a hand-written SVG `LineChart`
+    (no charting dependency) for the 24-hour temperature and humidity series, each with `role="img"` + a
+    screen-reader table of the same values; `WindIndicator` (compass needle rotated to the bearing, cardinal
+    label, "Calm" at 0 mph), the `Feels like` card with the rule that applied, `SunTimes` rendered in the
+    location's `utcOffsetMinutes`, and a "Sample 24-hour data" badge while the payload says `mock: true`.
+    Query key `['trends', lat, lng, hours]`, `staleTime` 15 min, so switching tabs does not refetch
   - Notification bell in the top bar: checks the active location every 15 minutes and raises frost, extreme
     temperature and significant-change alerts, with an unread badge, a panel and per-type preferences persisted in
     `weather-app:notification-preferences:v1` (thresholds included; nothing else is stored)
@@ -266,7 +282,7 @@ weather-app/
 ### Open-Meteo API (fallback / averaging partner)
 - **Base URL**: `weather.secondary.base-url` (default https://api.open-meteo.com/v1/forecast)
 - **Authentication**: none; `weather.secondary.user-agent` is sent as the User-Agent
-- **Request**: `?latitude={lat}&longitude={long}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code&temperature_unit=fahrenheit&timezone=UTC`
+- **Request**: `?latitude={lat}&longitude={long}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=UTC`
 - `temperature_unit=fahrenheit` keeps the °F contract; WMO `weather_code` is mapped to `description`
 - Global coverage, so it also serves locations the NWS cannot
 
@@ -309,6 +325,39 @@ weather-app/
 }
 ```
 
+### Trends Response Format (`GET /api/weather/trends`)
+```json
+{
+  "latitude": 37.7749,
+  "longitude": -122.4194,
+  "generatedAt": "2026-10-30T00:00:00Z",  // the hour the series ends on
+  "mock": true,                    // series is generated, not observed
+  "hours": 24,
+  "utcOffsetMinutes": -480,        // display offset for this location
+  "current": {
+    "temperature": 61.2,
+    "humidity": 72,
+    "windSpeedMph": 9.4,
+    "windDirectionDegrees": 285,   // bearing the wind blows FROM
+    "feelsLikeTemperature": 59.8,
+    "description": "Partly cloudy"
+  },
+  "hourly": [                      // ascending by time, exactly `hours` entries
+    {
+      "time": "2026-10-29T01:00:00Z",
+      "temperature": 58.1,
+      "humidity": 78,
+      "windSpeedMph": 7.2,
+      "windDirectionDegrees": 270,
+      "feelsLikeTemperature": 56.9
+    }
+  ],
+  "sunrise": "2026-10-30T14:31:00Z",  // null when the sun does not rise that day
+  "sunset": "2026-10-30T01:12:00Z",   // null when it does not set
+  "polar": null                    // null | "day" | "night" (inside the polar circles)
+}
+```
+
 ## Testing
 
 - **Backend Tests**: JUnit 5 with Spring Boot Test
@@ -332,11 +381,22 @@ weather-app/
   and `a11y.test.tsx` which runs `vitest-axe` over App, `ComparisonTab` and `NotificationPanel` in **both** themes
   (zero violations). `test/renderWithProviders.tsx` mirrors the providers from `main.tsx`, and
   `test/setup.ts` registers the axe matcher plus the per-test storage/timer/global resets
+- **Trends dashboard tests**: `LineChart.test.tsx` (role="img" + summary, one dot per value, sr-only table parity
+  with the payload, hour ticks in the location offset, responsive `viewBox`), `WindIndicator.test.tsx`
+  (rotation at 0/90/180/270/285°, cardinal label, "Calm", normalised bearings), `SunTimes.test.tsx` (offset
+  rendering, polar labels, day length), `TrendsTab.test.tsx` (both charts, mock badge, feels-like note, humidity
+  min/max/avg, skeletons, error + Retry) and `trendsQuery.test.ts` (key, 15-minute `staleTime`, `enabled`, window)
 - **Provider tests**: `WeatherAggregationServiceTest` covers both-healthy, fail-fast fallback, primary/secondary
   timeouts and both-fail using latches (no `Thread.sleep`); `OpenMeteoApiClientTest` covers °F mapping and WMO codes
 - **History tests**: `WeatherRecordRepositoryTest` (`@DataJpaTest`) verifies the derived finder, `WeatherHistoryServiceTest`
   covers persistence, windowing and trend wiring, `TemperatureTrendAnalyzerTest` covers up/down/stable/no-data,
   `WeatherServiceTest` asserts one row per successful query (including cache hits) and none on failure
+- **Trends tests**: `FeelsLikeCalculatorTest` covers both boundaries (`50/50.1`°F, `3/2.9` mph, `80/79.9`°F,
+  `40/39`%) and matches the NWS wind-chill and heat-index tables; `SunriseSunsetCalculatorTest` compares
+  New York's solstice times against published values (±2 min) plus polar day/night and the longitude offset;
+  `WeatherTrendsServiceTest` drives a fixed `Clock` to assert entry count, ordering, determinism, the `mock`
+  flag and the polar passthrough; `ConditionTest` covers the circular mean (`350°`+`10°` → `0°`) and the null
+  fallback; `WeatherControllerTest` asserts the `/api/weather/trends` contract and the 400s
 
 ## Important Notes
 

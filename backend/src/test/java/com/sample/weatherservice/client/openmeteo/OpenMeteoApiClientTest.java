@@ -116,7 +116,41 @@ class OpenMeteoApiClientTest {
         assertTrue(url.contains("latitude=40.7128"), url);
         assertTrue(url.contains("longitude=-74.0060"), url);
         assertTrue(url.contains("temperature_unit=fahrenheit"), url);
-        assertTrue(url.contains("current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code"), url);
+        assertTrue(url.contains("wind_speed_unit=mph"), url);
+        assertTrue(url.contains(
+                "current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,"
+                        + "wind_speed_10m,wind_direction_10m"), url);
+    }
+
+    @Test
+    void parse_mapsTheWindFields() throws Exception {
+        // given
+        JsonNode root = objectMapper.readTree("""
+                {"current": {"temperature_2m": 57.9, "relative_humidity_2m": 74,
+                             "wind_speed_10m": 9.4, "wind_direction_10m": 285.0}}
+                """);
+
+        // when
+        Condition condition = OpenMeteoApiClient.parse(root);
+
+        // then
+        assertEquals(9.4, condition.getWindSpeedMph());
+        assertEquals(285.0, condition.getWindDirectionDegrees());
+    }
+
+    @Test
+    void parse_withoutWindFields_leavesThemNull() throws Exception {
+        // given
+        JsonNode root = objectMapper.readTree("""
+                {"current": {"temperature_2m": 57.9}}
+                """);
+
+        // when
+        Condition condition = OpenMeteoApiClient.parse(root);
+
+        // then
+        assertNull(condition.getWindSpeedMph());
+        assertNull(condition.getWindDirectionDegrees());
     }
 
     @Test

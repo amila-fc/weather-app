@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 
-export type AppTab = 'current' | 'compare';
+export type AppTab = 'current' | 'trends' | 'compare';
 
 interface TabNavProps {
   activeTab: AppTab;
@@ -9,6 +9,7 @@ interface TabNavProps {
 
 const TABS: Array<{ id: AppTab; label: string }> = [
   { id: 'current', label: 'Current weather' },
+  { id: 'trends', label: 'Trends' },
   { id: 'compare', label: 'Compare' },
 ];
 

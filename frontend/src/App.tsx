@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ComparisonTab } from './components/ComparisonTab';
 import { CurrentWeatherTab } from './components/CurrentWeatherTab';
 import { ErrorBoundary, ErrorFallback } from './components/ErrorBoundary';
 import { NotificationBell } from './components/NotificationBell';
+import { SkeletonBlock } from './components/Skeleton';
 import { TabNav } from './components/TabNav';
 import type { AppTab } from './components/TabNav';
 import { ThemeToggle } from './components/ThemeToggle';
@@ -14,7 +15,27 @@ import type { Coordinates } from './api/weatherClient';
 import { weatherApi } from './api/weatherClient';
 import './App.css';
 
-const tabFromHash = (): AppTab => (window.location.hash === '#compare' ? 'compare' : 'current');
+// The dashboard pulls in the chart and dashboard widgets, so it is only downloaded when the tab is opened.
+const TrendsTab = lazy(() =>
+  import('./components/TrendsTab').then((module) => ({ default: module.TrendsTab })),
+);
+
+const TAB_HASHES: Record<AppTab, string> = {
+  current: '',
+  trends: '#trends',
+  compare: '#compare',
+};
+
+const tabFromHash = (): AppTab => {
+  const match = (Object.keys(TAB_HASHES) as AppTab[]).find((tab) => TAB_HASHES[tab] === window.location.hash);
+  return match ?? 'current';
+};
+
+const TAB_ANNOUNCEMENTS: Record<AppTab, string> = {
+  current: 'Showing current weather',
+  trends: 'Showing 24-hour trends',
+  compare: 'Showing comparison',
+};
 
 const reloadPage = () => window.location.reload();
 
@@ -39,7 +60,7 @@ function AppContent() {
 
   const selectTab = (tab: AppTab) => {
     setActiveTab(tab);
-    window.location.hash = tab === 'compare' ? '#compare' : '';
+    window.location.hash = TAB_HASHES[tab];
   };
 
   // A map pin popup hands its selected points straight to the comparison tab.
@@ -75,7 +96,7 @@ function AppContent() {
       </nav>
 
       <p className="sr-only" role="status" aria-live="polite">
-        {activeTab === 'current' ? 'Showing current weather' : 'Showing comparison'}
+        {TAB_ANNOUNCEMENTS[activeTab]}
       </p>
 
       <main className="app-main" id="main" tabIndex={-1}>
@@ -90,11 +111,21 @@ function AppContent() {
             />
           )}
         >
-          {activeTab === 'current' ? (
-            <CurrentWeatherTab onCompare={compareMapLocations} />
-          ) : (
-            <ComparisonTab comparison={comparison} />
+          {activeTab === 'current' && <CurrentWeatherTab onCompare={compareMapLocations} />}
+          {activeTab === 'trends' && (
+            <Suspense
+              fallback={
+                <div className="trends-tab" aria-busy="true">
+                  <span className="sr-only">Loading the trends dashboard…</span>
+                  <SkeletonBlock width="40%" height="1.25rem" />
+                  <SkeletonBlock width="100%" height="160px" />
+                </div>
+              }
+            >
+              <TrendsTab />
+            </Suspense>
           )}
+          {activeTab === 'compare' && <ComparisonTab comparison={comparison} />}
         </ErrorBoundary>
       </main>
     </div>

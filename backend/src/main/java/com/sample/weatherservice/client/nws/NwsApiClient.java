@@ -22,6 +22,8 @@ public class NwsApiClient implements WeatherProvider {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NwsApiClient.class);
 
+    private static final double KILOMETERS_PER_MILE = 1.609344;
+
     private final NwsProperties properties;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -156,10 +158,31 @@ public class NwsApiClient implements WeatherProvider {
             summary = forecast.at("/properties/periods/0/detailedForecast").asText();
         }
 
-        return new Condition(tempF, humidity, description, apparentTemp, summary);
+        // Wind is optional: NWS reports km/h in windSpeed.value and degrees in windDirection.value.
+        Double windSpeedMph = null;
+        JsonNode windSpeed = observation.at("/properties/windSpeed/value");
+        if (windSpeed.isNumber()) {
+            windSpeedMph = toMph(windSpeed.asDouble());
+        }
+        Double windDirectionDegrees = null;
+        JsonNode windDirection = observation.at("/properties/windDirection/value");
+        if (windDirection.isNumber()) {
+            windDirectionDegrees = windDirection.asDouble();
+        }
+
+        return new Condition(tempF, humidity, description, apparentTemp, summary)
+                .withWind(windSpeedMph, windDirectionDegrees);
     }
 
     static double toFahrenheit(double celsius) {
         return celsius * 9.0 / 5.0 + 32.0;
+    }
+
+    /**
+     * NWS observations report km/h; the API surface is mph. Rounded to one decimal so the payload stays tidy.
+     */
+    static double toMph(double kilometersPerHour) {
+        double milesPerHour = kilometersPerHour / KILOMETERS_PER_MILE;
+        return Math.round(milesPerHour * 10.0) / 10.0;
     }
 }

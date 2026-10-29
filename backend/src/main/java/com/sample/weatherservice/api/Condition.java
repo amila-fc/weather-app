@@ -64,6 +64,18 @@ public class Condition {
     @JsonProperty
     private WeatherSource source;
 
+    /**
+     * Wind speed in miles per hour, when a provider reports it
+     */
+    @JsonProperty
+    private Double windSpeedMph;
+
+    /**
+     * Direction the wind blows from, in degrees clockwise from north, when a provider reports it
+     */
+    @JsonProperty
+    private Double windDirectionDegrees;
+
     // Legacy constructor for backward compatibility
     public Condition(Double temperature) {
         this.temperature = temperature;
@@ -98,6 +110,8 @@ public class Condition {
         this.frostSeverity = other.frostSeverity;
         this.frostAdvisory = other.frostAdvisory;
         this.source = other.source;
+        this.windSpeedMph = other.windSpeedMph;
+        this.windDirectionDegrees = other.windDirectionDegrees;
     }
 
     public Double getTemperature() {
@@ -160,9 +174,29 @@ public class Condition {
         return copy;
     }
 
+    public Double getWindSpeedMph() {
+        return windSpeedMph;
+    }
+
+    public Double getWindDirectionDegrees() {
+        return windDirectionDegrees;
+    }
+
+    /**
+     * Wind is optional: a provider that does not report it leaves both fields null, so older cached
+     * payloads and clients keep working.
+     */
+    public Condition withWind(Double windSpeedMph, Double windDirectionDegrees) {
+        Condition copy = new Condition(this);
+        copy.windSpeedMph = windSpeedMph;
+        copy.windDirectionDegrees = windDirectionDegrees;
+        return copy;
+    }
+
     /**
      * Blends two provider payloads: numeric fields are averaged, while text fields (description, summary)
-     * are taken from the primary provider because provider wording is not comparable.
+     * are taken from the primary provider because provider wording is not comparable. Wind direction uses a
+     * circular mean, so 350° and 10° blend to 0° instead of 180°.
      */
     public static Condition averaged(Condition primary, Condition secondary) {
         return new Condition(
@@ -171,6 +205,8 @@ public class Condition {
                 primary.description,
                 mean(primary.apparentTemperature, secondary.apparentTemperature),
                 primary.summary)
+                .withWind(mean(primary.windSpeedMph, secondary.windSpeedMph),
+                        circularMean(primary.windDirectionDegrees, secondary.windDirectionDegrees))
                 .withSource(WeatherSource.AVERAGED);
     }
 
@@ -182,5 +218,22 @@ public class Condition {
             return first;
         }
         return (first + second) / 2;
+    }
+
+    /**
+     * Mean of two compass bearings via the unit vectors, normalised back into [0, 360).
+     */
+    private static Double circularMean(Double first, Double second) {
+        if (first == null) {
+            return second;
+        }
+        if (second == null) {
+            return first;
+        }
+        double x = Math.cos(Math.toRadians(first)) + Math.cos(Math.toRadians(second));
+        double y = Math.sin(Math.toRadians(first)) + Math.sin(Math.toRadians(second));
+        double degrees = Math.toDegrees(Math.atan2(y, x));
+        // Normalise into [0, 360): opposite-ish vectors can land on -0.0 or 360.0 without this.
+        return (degrees + 360.0) % 360.0;
     }
 }

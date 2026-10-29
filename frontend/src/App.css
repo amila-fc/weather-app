@@ -981,3 +981,266 @@
     flex: 1 1 100%;
   }
 }
+
+/* ---------------------------------------------------------------- Trends dashboard */
+
+.trends-tab {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-section);
+  width: 100%;
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .trends-tab {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      'summary summary'
+      'temperature humidity';
+  }
+
+  .trends-tab > .trends-summary {
+    grid-area: summary;
+  }
+
+  .trends-tab > .trends-panel:nth-of-type(1) {
+    grid-area: temperature;
+  }
+
+  .trends-tab > .trends-panel:nth-of-type(2) {
+    grid-area: humidity;
+  }
+}
+
+.trends-tab > * {
+  min-width: 0;
+}
+
+.trends-summary__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.trends-summary__header h2 {
+  margin: 0;
+}
+
+.trends-badge {
+  margin: 0;
+  padding: 0.35rem 0.8rem;
+  border-radius: var(--radius-pill);
+  border: 1px dashed var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.trends-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .trends-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.trends-card,
+.wind-indicator,
+.sun-times {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+}
+
+.trends-card__title,
+.wind-indicator__title,
+.sun-times__title {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.trends-card__value {
+  margin: 0;
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+.trends-card__note,
+.trends-card__meta {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.trends-panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-section);
+}
+
+.trends-panel h3 {
+  margin: 0 0 0.75rem;
+}
+
+.trends-panel__summary {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.line-chart {
+  margin: 0;
+}
+
+.line-chart__canvas {
+  width: 100%;
+}
+
+.line-chart__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.line-chart__grid {
+  stroke: var(--color-border);
+  stroke-width: 0.5;
+  stroke-dasharray: 3 3;
+}
+
+.line-chart__tick {
+  fill: var(--color-text-muted);
+  font-size: 9px;
+  font-family: var(--font-body);
+}
+
+.line-chart__line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  transition: stroke 0.2s;
+}
+
+.line-chart__area {
+  opacity: 0.16;
+}
+
+.line-chart__dot {
+  stroke: var(--color-surface);
+  stroke-width: 1;
+}
+
+.wind-indicator__rose {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  margin: 0 auto 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+}
+
+.wind-indicator__axis {
+  position: absolute;
+  background: var(--color-border);
+}
+
+.wind-indicator__axis--vertical {
+  top: 6px;
+  bottom: 6px;
+  left: 50%;
+  width: 1px;
+}
+
+.wind-indicator__axis--horizontal {
+  left: 6px;
+  right: 6px;
+  top: 50%;
+  height: 1px;
+}
+
+/* The needle points at the bearing the wind blows FROM, so 0deg is north. */
+.wind-indicator__arrow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  transform-origin: 50% 100%;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 34px solid var(--color-accent);
+  margin-left: -7px;
+  margin-top: -34px;
+  transition: transform 0.3s;
+}
+
+.wind-indicator__speed,
+.sun-times__row dd,
+.trends-card__value {
+  font-weight: 600;
+}
+
+.wind-indicator__speed,
+.wind-indicator__cardinal,
+.wind-indicator__calm {
+  margin: 0;
+  text-align: center;
+}
+
+.wind-indicator__speed {
+  font-size: 1.2rem;
+}
+
+.wind-indicator__cardinal,
+.wind-indicator__calm {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.sun-times__list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.sun-times__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.sun-times__row dt {
+  color: var(--color-text-muted);
+}
+
+.sun-times__row dd {
+  margin: 0;
+  text-align: right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wind-indicator__arrow,
+  .line-chart__line {
+    transition: none;
+  }
+}

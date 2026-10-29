@@ -7,6 +7,8 @@ import com.sample.weatherservice.api.WeatherSource;
 import com.sample.weatherservice.client.nws.NwsApiException;
 import com.sample.weatherservice.service.WeatherHistoryService;
 import com.sample.weatherservice.service.WeatherService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -16,10 +18,14 @@ import org.springframework.context.MessageSource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 
+import static org.hamcrest.Matchers.hasSize;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -225,6 +231,111 @@ class WeatherControllerTest {
     @Test
     void getHistory_missingCoordinates_returns400() throws Exception {
         this.mockMvc.perform(get("/api/weather/history")
+                        .param("lat", "47.0"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Invalid request"));
+    }
+
+    @Test
+    void getTrends_defaultWindow_returnsTheDashboardContract() throws Exception {
+        // when+then
+        this.mockMvc.perform(get("/api/weather/trends")
+                        .param("lat", "37.7749")
+                        .param("long", "-122.4194"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.latitude").value(37.7749))
+                .andExpect(jsonPath("$.longitude").value(-122.4194))
+                .andExpect(jsonPath("$.generatedAt").isNotEmpty())
+                .andExpect(jsonPath("$.mock").value(true))
+                .andExpect(jsonPath("$.hours").value(24))
+                .andExpect(jsonPath("$.utcOffsetMinutes").value(-480))
+                .andExpect(jsonPath("$.current.temperature").isNumber())
+                .andExpect(jsonPath("$.current.humidity").isNumber())
+                .andExpect(jsonPath("$.current.windSpeedMph").isNumber())
+                .andExpect(jsonPath("$.current.windDirectionDegrees").isNumber())
+                .andExpect(jsonPath("$.current.feelsLikeTemperature").isNumber())
+                .andExpect(jsonPath("$.current.description").isNotEmpty())
+                .andExpect(jsonPath("$.hourly", hasSize(24)))
+                .andExpect(jsonPath("$.hourly[0].time").isNotEmpty())
+                .andExpect(jsonPath("$.hourly[0].temperature").isNumber())
+                .andExpect(jsonPath("$.hourly[0].humidity").isNumber())
+                .andExpect(jsonPath("$.hourly[0].windSpeedMph").isNumber())
+                .andExpect(jsonPath("$.hourly[0].windDirectionDegrees").isNumber())
+                .andExpect(jsonPath("$.hourly[0].feelsLikeTemperature").isNumber())
+                .andExpect(jsonPath("$.hourly[23].time").isNotEmpty())
+                .andExpect(jsonPath("$.sunrise").isNotEmpty())
+                .andExpect(jsonPath("$.sunset").isNotEmpty());
+    }
+
+    @Test
+    void getTrends_hourlySeriesAscendsAndEndsAtTheGeneratedHour() throws Exception {
+        // when
+        String body = this.mockMvc.perform(get("/api/weather/trends")
+                        .param("lat", "37.7749")
+                        .param("long", "-122.4194"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        // then
+        JsonNode root = new ObjectMapper().readTree(body);
+        Instant generatedAt = Instant.parse(root.get("generatedAt").asText());
+        JsonNode hourly = root.get("hourly");
+        assertEquals(generatedAt, Instant.parse(hourly.get(hourly.size() - 1).get("time").asText()));
+        for (int index = 1; index < hourly.size(); index++) {
+            Instant previous = Instant.parse(hourly.get(index - 1).get("time").asText());
+            Instant current = Instant.parse(hourly.get(index).get("time").asText());
+            assertTrue(previous.isBefore(current));
+            assertEquals(Duration.ofHours(1), Duration.between(previous, current));
+        }
+    }
+
+    @Test
+    void getTrends_acceptsTheSmallestAndLargestWindow() throws Exception {
+        // when+then
+        this.mockMvc.perform(get("/api/weather/trends")
+                        .param("lat", "47.0")
+                        .param("long", "8.0")
+                        .param("hours", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hours").value(1))
+                .andExpect(jsonPath("$.hourly", hasSize(1)));
+
+        this.mockMvc.perform(get("/api/weather/trends")
+                        .param("lat", "47.0")
+                        .param("long", "8.0")
+                        .param("hours", "48"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hours").value(48))
+                .andExpect(jsonPath("$.hourly", hasSize(48)));
+    }
+
+    @Test
+    void getTrends_hoursOutOfRange_returns400() throws Exception {
+        for (String hours : new String[] {"0", "-1", "49"}) {
+            this.mockMvc.perform(get("/api/weather/trends")
+                            .param("lat", "47.0")
+                            .param("long", "8.0")
+                            .param("hours", hours))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error").value("Invalid request"));
+        }
+    }
+
+    @Test
+    void getTrends_hoursNotANumber_returns400() throws Exception {
+        this.mockMvc.perform(get("/api/weather/trends")
+                        .param("lat", "47.0")
+                        .param("long", "8.0")
+                        .param("hours", "many"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Invalid request"));
+    }
+
+    @Test
+    void getTrends_missingCoordinates_returns400() throws Exception {
+        this.mockMvc.perform(get("/api/weather/trends")
                         .param("lat", "47.0"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Invalid request"));
