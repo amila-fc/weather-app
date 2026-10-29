@@ -1,5 +1,6 @@
 package com.sample.weatherservice.client.nws;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sample.weatherservice.api.Condition;
 import com.sample.weatherservice.api.WeatherSource;
@@ -7,6 +8,8 @@ import org.apache.http.impl.client.HttpClientBuilder;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NwsApiClientTest {
 
@@ -37,6 +40,68 @@ class NwsApiClientTest {
         // then
         assertEquals(WeatherSource.NWS, condition.getSource());
         assertEquals(50.0, condition.getTemperature());
+    }
+
+    @Test
+    void parseWeatherData_mapsAFullObservationAndForecast() throws Exception {
+        // given
+        JsonNode observation = new ObjectMapper().readTree("""
+                {"properties": {"temperature": {"value": 10.0}, "relativeHumidity": {"value": 70.0},
+                                "textDescription": "Clear", "windChill": {"value": 8.0}}}
+                """);
+        JsonNode forecast = new ObjectMapper().readTree("""
+                {"properties": {"periods": [{"detailedForecast": "Sunny and mild"}]}}
+                """);
+
+        // when
+        Condition condition = NwsApiClient.parseWeatherData(observation, forecast);
+
+        // then
+        assertEquals(50.0, condition.getTemperature(), 0.0001);
+        assertEquals(70.0, condition.getHumidity());
+        assertEquals("Clear", condition.getDescription());
+        assertEquals(46.4, condition.getApparentTemperature(), 0.0001);
+        assertEquals("Sunny and mild", condition.getSummary());
+    }
+
+    @Test
+    void parseWeatherData_missingTemperature_failsLoudlyInsteadOfReporting32F() throws Exception {
+        // given
+        JsonNode observation = new ObjectMapper().readTree("""
+                {"properties": {"relativeHumidity": {"value": 70.0}, "textDescription": "Clear"}}
+                """);
+
+        // when + then
+        NwsApiException exception = assertThrows(NwsApiException.class,
+                () -> NwsApiClient.parseWeatherData(observation, new ObjectMapper().createObjectNode()));
+        assertTrue(exception.getMessage().contains("temperature"));
+    }
+
+    @Test
+    void parseWeatherData_missingHumidity_failsLoudly() throws Exception {
+        // given
+        JsonNode observation = new ObjectMapper().readTree("""
+                {"properties": {"temperature": {"value": 10.0}, "textDescription": "Clear"}}
+                """);
+
+        // when + then
+        NwsApiException exception = assertThrows(NwsApiException.class,
+                () -> NwsApiClient.parseWeatherData(observation, new ObjectMapper().createObjectNode()));
+        assertTrue(exception.getMessage().contains("humidity"));
+    }
+
+    @Test
+    void parseWeatherData_blankDescription_failsLoudly() throws Exception {
+        // given
+        JsonNode observation = new ObjectMapper().readTree("""
+                {"properties": {"temperature": {"value": 10.0}, "relativeHumidity": {"value": 70.0},
+                                "textDescription": "  "}}
+                """);
+
+        // when + then
+        NwsApiException exception = assertThrows(NwsApiException.class,
+                () -> NwsApiClient.parseWeatherData(observation, new ObjectMapper().createObjectNode()));
+        assertTrue(exception.getMessage().contains("text description"));
     }
 
     @Test

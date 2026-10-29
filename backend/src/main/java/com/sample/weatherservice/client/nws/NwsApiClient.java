@@ -91,6 +91,8 @@ public class NwsApiClient implements WeatherProvider {
 
             return parseWeatherData(observationResponse, forecastResponse);
 
+        } catch (NwsApiException e) {
+            throw e;
         } catch (Exception e) {
             LOGGER.error("Failed to get weather data for lat: {}, lon: {}", latitude, longitude, e);
             throw new NwsApiException("Failed to get weather data", e);
@@ -112,18 +114,31 @@ public class NwsApiClient implements WeatherProvider {
         }
     }
 
-    private Condition parseWeatherData(JsonNode observation, JsonNode forecast) {
-        // Extract temperature from observation (in Celsius)
-        Double tempC = observation.at("/properties/temperature/value").asDouble();
+    static Condition parseWeatherData(JsonNode observation, JsonNode forecast) {
+        // A missing observation field must fail loudly: substituting 0.0/"" reported 32F and a blank
+        // description for real stations. A failed provider lets the aggregator use Open-Meteo instead.
+        JsonNode temperature = observation.at("/properties/temperature/value");
+        if (!temperature.isNumber()) {
+            throw new NwsApiException("NWS observation is missing the temperature");
+        }
+        Double tempC = temperature.asDouble();
 
         // Convert to Fahrenheit to match frontend expectations
         Double tempF = toFahrenheit(tempC);
 
         // Extract humidity (as percentage)
-        Double humidity = observation.at("/properties/relativeHumidity/value").asDouble();
+        JsonNode relativeHumidity = observation.at("/properties/relativeHumidity/value");
+        if (!relativeHumidity.isNumber()) {
+            throw new NwsApiException("NWS observation is missing the relative humidity");
+        }
+        Double humidity = relativeHumidity.asDouble();
 
         // Extract description from observation
-        String description = observation.at("/properties/textDescription").asText();
+        JsonNode textDescription = observation.at("/properties/textDescription");
+        if (!textDescription.isTextual() || textDescription.asText().isBlank()) {
+            throw new NwsApiException("NWS observation is missing the text description");
+        }
+        String description = textDescription.asText();
 
         // Get apparent temperature (heat index or wind chill if available)
         Double apparentTemp = tempF; // Default to actual temperature
